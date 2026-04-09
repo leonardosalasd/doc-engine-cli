@@ -13,7 +13,7 @@
 Transform any `README.md` into a premium, print-ready PDF report — no configuration, no templates, no LaTeX.
 
 ```
-pip install doc-engine-cli
+pipx install doc-engine-cli
 ```
 
 ---
@@ -52,8 +52,9 @@ That's it. Zero configuration required.
 ### Installation
 
 ```bash
-pip install doc-engine-cli
+pipx install doc-engine-cli
 ```
+*(If you don't have `pipx`, you can install it via `pip install pipx`)*
 
 ### Generate Your First PDF
 
