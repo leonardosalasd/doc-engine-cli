@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "doc-engine-cli"
+version = "0.1.0"
+authors = [
+  { name = "Leonardo Salas", email = "leonardo.salas01@outlook.com" },
+]
+description = "Zero-config CLI that transforms Markdown into professional PDF documents using Typst."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Documentation",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+]
+keywords = ["documentation", "markdown", "pdf", "typst", "cli", "zero-config"]
+dependencies = [
+    "click>=8.0",
+    "rich>=13.0",
+    "mistune>=3.0",
+    "typst>=0.11",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/leonardosalasd/doc-engine-cli"
+Repository = "https://github.com/leonardosalasd/doc-engine-cli"
+Issues = "https://github.com/leonardosalasd/doc-engine-cli/issues"
+
+[project.scripts]
+doc-engine = "doc_engine.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["doc_engine*"]
+
+[tool.setuptools.package-data]
+doc_engine = ["templates/*.typ"]
