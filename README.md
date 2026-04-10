@@ -51,6 +51,18 @@ That's it. Zero configuration required.
 
 ---
 
+## 🎓 Academic Features (v0.1.2+)
+
+`doc-engine-cli` ships with a premium scientific layout (using Linux Libertine and Inter font-families) and **Zero-Config Bibliography** handling. 
+
+To add an IEEE-styled bibliography to your PDF:
+1. Create a `refs.bib`, `references.bib`, or `bibliography.bib` file in your repository.
+2. In your `README.md`, cite using standard syntax: `[@citation-key]`.
+
+When you run `doc-engine build`, the CLI will automatically detect your `.bib` file, securely bind it to the sandbox, and inject a formatted References page at the end of the document.
+
+---
+
 ## Quick Start
 
 ### Installation

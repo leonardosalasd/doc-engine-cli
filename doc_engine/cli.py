@@ -14,6 +14,7 @@ from doc_engine.converter import convert, extract_title, strip_first_heading
 console = Console()
 
 _README_CANDIDATES = ("README.md", "readme.md", "Readme.md", "README.MD")
+_BIB_CANDIDATES = ("refs.bib", "references.bib", "bibliography.bib")
 
 
 def _detect_git_user() -> str:
@@ -30,8 +31,8 @@ def _detect_git_user() -> str:
         return "Anonymous"
 
 
-def _find_readme(directory: Path) -> Path | None:
-    for name in _README_CANDIDATES:
+def _find_file(directory: Path, candidates: tuple[str, ...]) -> Path | None:
+    for name in candidates:
         candidate = directory / name
         if candidate.exists():
             return candidate
@@ -51,12 +52,14 @@ def cli(ctx: click.Context) -> None:
 @click.option("-o", "--output", default=None, help="Output PDF file path.")
 @click.option("-t", "--title", default=None, help="Document title override.")
 @click.option("-a", "--author", default=None, help="Author name override.")
+@click.option("--bib", default=None, help="Path to custom .bib file.")
 @click.option("--open", "open_pdf", is_flag=True, help="Open PDF after generation.")
 def build(
     input_file: str | None,
     output: str | None,
     title: str | None,
     author: str | None,
+    bib: str | None,
     open_pdf: bool,
 ) -> None:
     console.print(
@@ -67,10 +70,12 @@ def build(
         )
     )
 
+    cwd = Path.cwd()
+
     if input_file:
         input_path = Path(input_file)
     else:
-        input_path = _find_readme(Path.cwd())
+        input_path = _find_file(cwd, _README_CANDIDATES)
         if not input_path:
             console.print(
                 "[bold red]Error:[/bold red] No README.md found in current directory.\n"
@@ -83,15 +88,27 @@ def build(
         console.print(f"[bold red]Error:[/bold red] File not found — {input_path}")
         raise SystemExit(1)
 
+    # Detect Bibliography
+    resolved_bib = None
+    if bib:
+        resolved_bib = Path(bib)
+        if not resolved_bib.exists():
+            console.print(f"[bold yellow]Warning:[/bold yellow] Bibliography file not found — {bib}")
+            resolved_bib = None
+    else:
+        resolved_bib = _find_file(cwd, _BIB_CANDIDATES)
+        if resolved_bib:
+            console.print(f"  [dim]Auto-detected bib:[/dim] [cyan]{resolved_bib.name}[/cyan]")
+
     markdown_content = input_path.read_text(encoding="utf-8")
 
     resolved_title = title or extract_title(markdown_content)
     resolved_author = author or _detect_git_user()
     resolved_output = output or f"{input_path.stem}_doc.pdf"
 
-    console.print(f"  [dim]Title:[/dim]  [white]{resolved_title}[/white]")
-    console.print(f"  [dim]Author:[/dim] [white]{resolved_author}[/white]")
-    console.print(f"  [dim]Output:[/dim] [cyan]{resolved_output}[/cyan]")
+    console.print(f"  [dim]Title:[/dim]   [white]{resolved_title}[/white]")
+    console.print(f"  [dim]Author:[/dim]  [white]{resolved_author}[/white]")
+    console.print(f"  [dim]Output:[/dim]  [cyan]{resolved_output}[/cyan]")
     console.print()
 
     with console.status("[bold blue]Converting Markdown → Typst…[/bold blue]"):
@@ -105,6 +122,7 @@ def build(
                 title=resolved_title,
                 author=resolved_author,
                 output_path=resolved_output,
+                bib_file=str(resolved_bib.resolve()) if resolved_bib else None,
             )
         except Exception as exc:
             console.print(f"\n[bold red]Compilation failed:[/bold red] {exc}")

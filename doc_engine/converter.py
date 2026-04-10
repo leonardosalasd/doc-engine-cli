@@ -184,7 +184,10 @@ def convert(markdown: str) -> str:
         renderer=renderer,
         plugins=["table", "strikethrough"],
     )
-    return md(markdown)
+    typst_str = md(markdown)
+    # Translate Pandoc syntax [@citation_key] back to native Typst @citation_key
+    typst_str = re.sub(r'\[\\@([a-zA-Z0-9_\-]+)\]', r'@\1', typst_str)
+    return typst_str
 
 
 def extract_title(markdown: str) -> str:
