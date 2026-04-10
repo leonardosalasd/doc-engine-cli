@@ -13,7 +13,7 @@
 Transform any `README.md` into a premium, print-ready PDF report — no configuration, no templates, no LaTeX.
 
 <br>
-<img src="assets/doc-engine1.gif" alt="doc-engine-cli Generation Demo" width="800"/>
+<img src="assets/doc-engine2.gif" alt="doc-engine-cli Generation Demo" width="800"/>
 <br>
 
 ```
