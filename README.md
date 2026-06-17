@@ -6,7 +6,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
-[![PyPI](https://img.shields.io/badge/PyPI-v0.1.0-006DAD.svg?logo=pypi&logoColor=white)](https://pypi.org/project/doc-engine-cli/)
+[![PyPI](https://img.shields.io/pypi/v/doc-engine-cli.svg?logo=pypi&logoColor=white&color=006DAD)](https://pypi.org/project/doc-engine-cli/)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/doc-engine-cli?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/doc-engine-cli)
 [![Typst](https://img.shields.io/badge/Powered_by-Typst-239DAD.svg?logo=typst&logoColor=white)](https://typst.app/)
 [![Code style: black](https://img.shields.io/badge/code_style-black-000000.svg)](https://github.com/psf/black)
 
@@ -43,9 +44,10 @@ That's it. Zero configuration required.
 | Feature | Description |
 |---|---|
 | **Zero-Config** | Auto-detects `README.md`, Git author, and document title. No setup files needed. |
+| **Five Templates** | Academic, modern, minimal, technical, and book layouts, each with a configurable accent color. |
+| **Error Checking** | Reports source problems with line and column before compiling. A `--dry-run` mode runs the check on its own. |
 | **Premium Typography** | Inter font family with fallback chain, justified text, and optimized line spacing. |
 | **Code-Centric** | Syntax-highlighted code blocks with Cascadia Code font and GitHub-style backgrounds. |
-| **Academic Ready** | IEEE and white paper-inspired layout with cover page and table of contents. |
 | **Pure Python** | No external binaries required (no Pandoc, no LaTeX). Ships as a single `pip install`. |
 | **Cross-Platform** | Works on Windows, macOS, and Linux with Python 3.10+. |
 
@@ -97,24 +99,29 @@ doc-engine build path/to/file.md -o output.pdf -t "Custom Title" -a "Author Name
 
 ## Usage
 
-### CLI Reference
+### Commands
 
 ```
-Usage: doc-engine build [OPTIONS] [INPUT_FILE]
-
-  Convert a Markdown file into a professional PDF document.
-
-Arguments:
-  INPUT_FILE    Path to Markdown file (default: auto-detect README.md)
-
-Options:
-  -o, --output  TEXT    Output PDF file path (default: <input>_doc.pdf)
-  -t, --title   TEXT    Document title override (default: first # heading)
-  -a, --author  TEXT    Author name override (default: git user.name)
-  --open                Open PDF after generation
-  --version             Show version and exit
-  --help                Show this message and exit
+doc-engine build [INPUT_FILE]   Convert a Markdown file into a PDF
+doc-engine info                 Show version, repository, and templates
+doc-engine --version            Print the version and exit
+doc-engine --help               Show all commands and flags
 ```
+
+### `build` flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `INPUT_FILE` | auto-detect `README.md` | Path to the Markdown file to convert. |
+| `-o, --output` | `<input>_doc.pdf` | Output PDF path. |
+| `-t, --title` | first `# heading` | Document title override. |
+| `-a, --author` | `git config user.name` | Author name override. |
+| `--template` | `academic` | Layout to render with: `academic`, `modern`, `minimal`, `technical`, `book`. |
+| `--accent` | template default | Accent color as a hex value (`#2563eb`) or a name (`blue`, `teal`, `rose`, ...). |
+| `--bib` | auto-detect `refs.bib` | Path to a custom `.bib` file for the bibliography. |
+| `--no-branding` | off | Hide the `doc-engine` attribution from the PDF. |
+| `--dry-run` | off | Check the Markdown for errors and exit without writing a PDF. |
+| `--open` | off | Open the PDF after it is generated. |
 
 ### Examples
 
@@ -135,6 +142,22 @@ doc-engine build CONTRIBUTING.md -o contributing_guide.pdf
 doc-engine build -t "API Reference v2.0" -a "Engineering Team"
 ```
 
+**Pick a template and accent color:**
+```bash
+doc-engine build --template modern --accent teal
+doc-engine build --template technical --accent "#7c3aed"
+```
+
+**Check for errors before building:**
+```bash
+doc-engine build --dry-run
+```
+
+**Drop the engine attribution from the PDF:**
+```bash
+doc-engine build --no-branding
+```
+
 **Generate and open immediately:**
 ```bash
 doc-engine build --open
@@ -143,6 +166,44 @@ doc-engine build --open
 **Use as Python module:**
 ```bash
 python -m doc_engine build README.md
+```
+
+---
+
+## Templates
+
+`doc-engine` ships with five layouts. Switch with `--template <name>`, and recolor any of them with `--accent`.
+
+| Template | Look |
+|---|---|
+| `academic` | Serif IEEE-style report with cover page, table of contents, and running headers. The default. |
+| `modern` | Clean sans-serif layout with generous spacing and a left-aligned cover. |
+| `minimal` | No cover or table of contents — a compact title block, then straight into the content. |
+| `technical` | Bold layout with a filled accent banner and section markers. Good for engineering docs. |
+| `book` | Classic centered title page with chapter-style section breaks. |
+
+```bash
+doc-engine build --template book
+doc-engine build --template modern --accent rose
+```
+
+Accent colors take a hex value (`#0ea5e9`) or one of these names: `blue`, `sky`, `indigo`, `violet`, `purple`, `red`, `rose`, `orange`, `amber`, `green`, `emerald`, `teal`, `slate`, `black`.
+
+---
+
+## Checking for Errors
+
+Before compiling, `doc-engine` scans the Markdown for problems and reports them with the exact line and column, so you can jump straight to the fix:
+
+```
+README.md:42:8: error: link URL must not be empty
+README.md:51:1: warning: image source is empty
+```
+
+Errors stop the build; warnings don't. Use `--dry-run` to run the check on its own without producing a PDF — handy in CI:
+
+```bash
+doc-engine build --dry-run
 ```
 
 ---
@@ -170,8 +231,8 @@ python -m doc_engine build README.md
        └──────┬──────┘          └───────┬──────┘
               │                         │
               │    ┌──────────────┐     │
-              └────► report.typ   ◄─────┘
-                   │  (template)  │
+              └────► templates/   ◄─────┘
+                   │   *.typ      │
                    └──────┬──────┘
                           │
                    ┌──────▼──────┐
@@ -184,9 +245,10 @@ python -m doc_engine build README.md
 | Stage | Module | Responsibility |
 |---|---|---|
 | **1. Input Resolution** | `cli.py` | Locate Markdown file, detect Git metadata |
-| **2. Markdown Parsing** | `converter.py` | Parse Markdown AST via `mistune`, emit Typst markup |
-| **3. Template Injection** | `compiler.py` | Merge converted content with `report.typ` template |
-| **4. PDF Compilation** | `compiler.py` | Compile via `typst` Python bindings |
+| **2. Source Checking** | `linter.py` | Report empty links and unclosed fences with line/column |
+| **3. Markdown Parsing** | `converter.py` | Parse Markdown AST via `mistune`, emit Typst markup |
+| **4. Template Injection** | `compiler.py` | Merge converted content with the selected template |
+| **5. PDF Compilation** | `compiler.py` | Compile via `typst` Python bindings |
 
 ---
 
@@ -210,9 +272,9 @@ The converter module parses Markdown using [`mistune`](https://github.com/leptur
 
 Special characters (`#`, `$`, `@`, `*`, `_`, etc.) are automatically escaped to prevent Typst interpretation.
 
-### PDF Template
+### PDF Templates
 
-The included `report.typ` template provides:
+Each template lives in `doc_engine/templates/` and exposes the same `setup_doc` entry point, so the compiler can swap between them with `--template`. The default `academic` template provides:
 
 - **Cover page** with title, author, and date
 - **Table of contents** with depth-3 navigation
@@ -220,6 +282,8 @@ The included `report.typ` template provides:
 - **Page footer** with page numbers and engine attribution
 - **Code blocks** with rounded corners and subtle borders
 - **Heading hierarchy** with accent-colored H2 sections
+
+The other templates (`modern`, `minimal`, `technical`, `book`) keep the same content but change the fonts, layout, and cover. The accent color is injected at compile time, so `--accent` recolors any of them.
 
 ---
 
@@ -233,11 +297,18 @@ doc-engine-cli/
 │   ├── cli.py               # Click-based CLI + Git detection
 │   ├── converter.py         # Markdown → Typst transpiler
 │   ├── compiler.py          # Typst → PDF compilation engine
+│   ├── linter.py            # Source checks (line/column reporting)
 │   └── templates/
-│       └── report.typ       # Professional Typst report template
+│       ├── academic.typ     # Default IEEE-style report
+│       ├── modern.typ       # Clean sans-serif layout
+│       ├── minimal.typ      # Compact, no cover page
+│       ├── technical.typ    # Accent banner + section markers
+│       └── book.typ         # Centered title page, chapter breaks
 ├── tests/
 │   ├── __init__.py
-│   └── test_converter.py    # Unit tests for converter module
+│   ├── test_converter.py    # Unit tests for the converter
+│   ├── test_linter.py       # Unit tests for the linter
+│   └── test_cli.py          # CLI and template/accent tests
 ├── pyproject.toml            # Package configuration + dependencies
 ├── LICENSE                   # MIT License
 ├── .gitignore
@@ -287,6 +358,22 @@ python -m doc_engine build README.md -o docs_output.pdf
 
 ---
 
+## Docker
+
+A container image is published to GitHub Container Registry on every release. Mount your project into `/workspace` and run `build` as usual:
+
+```bash
+docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build
+```
+
+The entrypoint is `doc-engine`, so you can pass any command or flag:
+
+```bash
+docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build --template modern --accent teal
+```
+
+---
+
 ## Supported Markdown Elements
 
 - [x] Headings (H1–H6)
@@ -307,10 +394,11 @@ python -m doc_engine build README.md -o docs_output.pdf
 
 ## Roadmap
 
-- [ ] Custom template injection via `--template` flag
+- [x] Template selection via `--template` flag
+- [x] Configurable accent color via `--accent`
+- [x] Source error checking with line/column and `--dry-run`
+- [ ] User-supplied template files (point `--template` at a path)
 - [ ] Multi-file documentation merge
-- [ ] GitHub Actions integration for CI/CD pipelines
-- [ ] Dark-mode PDF theme variant
 - [ ] Image downloading and embedding for remote URLs
 - [ ] YAML front-matter support for metadata override
 - [ ] PDF/A compliance for archival
