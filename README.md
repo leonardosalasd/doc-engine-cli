@@ -99,6 +99,12 @@ doc-engine build path/to/file.md -o output.pdf -t "Custom Title" -a "Author Name
 
 ## Usage
 
+<div align="center">
+<img src="assets/config.gif" alt="doc-engine-cli configuration demo" width="800"/>
+<br>
+<em>Switching templates, recoloring the accent, and checking a file for errors.</em>
+</div>
+
 ### Commands
 
 ```
