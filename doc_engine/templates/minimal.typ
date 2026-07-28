@@ -1,5 +1,6 @@
 #let setup_doc(
   title: "",
+  subtitle: "",
   author: "Anonymous",
   date: datetime.today().display(),
   bibliography_file: none,
@@ -72,6 +73,10 @@
 
   block[
     #text(size: 24pt, weight: 800, fill: ink)[#title]
+    #if subtitle != "" [
+      #v(0.3em)
+      #text(size: 13pt, weight: 400, fill: muted)[#subtitle]
+    ]
     #v(0.4em)
     #text(size: 10pt, fill: muted)[#author #h(0.6em) · #h(0.6em) #date]
     #v(0.6em)

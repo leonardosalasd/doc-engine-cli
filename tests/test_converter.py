@@ -1,4 +1,9 @@
-from doc_engine.converter import convert, extract_title, strip_first_heading
+from doc_engine.converter import (
+    convert,
+    convert_document,
+    extract_title,
+    strip_first_heading,
+)
 
 
 class TestEscaping:
@@ -82,3 +87,46 @@ class TestConvert:
 
     def test_empty_input(self) -> None:
         assert convert("") == ""
+
+
+class TestTaskLists:
+    def test_checked_and_unchecked_render_boxes(self) -> None:
+        result = convert("- [x] done\n- [ ] todo\n")
+        assert 'fill: rgb("#16a34a")' in result
+        assert 'stroke: 1pt + rgb("#94a3b8")' in result
+        assert "done" in result
+        assert "todo" in result
+
+
+class TestFootnotes:
+    def test_reference_becomes_inline_footnote(self) -> None:
+        result = convert("A claim[^1].\n\n[^1]: The evidence.\n")
+        assert "#footnote[The evidence.]" in result
+
+    def test_definition_block_is_dropped(self) -> None:
+        result = convert("A claim[^1].\n\n[^1]: The evidence.\n")
+        assert result.count("The evidence.") == 1
+
+
+class TestImages:
+    def test_local_image_is_embedded(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"\x89PNG\r\n")
+        conversion = convert_document("![logo](logo.png)", base_dir=tmp_path)
+        name = next(iter(conversion.assets))
+        assert f'#image("{name}")' in conversion.body
+        assert conversion.assets[name].endswith("logo.png")
+
+    def test_repeated_image_is_registered_once(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"\x89PNG\r\n")
+        conversion = convert_document("![a](logo.png) ![b](logo.png)", base_dir=tmp_path)
+        assert len(conversion.assets) == 1
+
+    def test_remote_image_falls_back_to_alt(self, tmp_path) -> None:
+        conversion = convert_document("![alt](https://x.test/a.png)", base_dir=tmp_path)
+        assert conversion.assets == {}
+        assert "[alt]" in conversion.body
+
+    def test_missing_image_falls_back_to_alt(self, tmp_path) -> None:
+        conversion = convert_document("![alt](nope.png)", base_dir=tmp_path)
+        assert conversion.assets == {}
+        assert "[alt]" in conversion.body

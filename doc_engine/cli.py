@@ -2,15 +2,16 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import click
 from rich.console import Console
 from rich.panel import Panel
 
-from doc_engine import __version__
+from doc_engine import __version__, frontmatter
 from doc_engine.compiler import DEFAULT_TEMPLATE, available_templates, compile_pdf
-from doc_engine.converter import convert, extract_title, strip_first_heading
+from doc_engine.converter import convert_document, extract_title, strip_first_heading
 from doc_engine.linter import has_errors, lint
 
 console = Console()
@@ -62,9 +63,7 @@ def _find_file(directory: Path, candidates: tuple[str, ...]) -> Path | None:
     return None
 
 
-def _normalize_accent(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
-    if value is None:
-        return None
+def _accent_hex(value: str) -> str | None:
     key = value.strip().lower()
     if key in _NAMED_ACCENTS:
         return _NAMED_ACCENTS[key]
@@ -73,8 +72,52 @@ def _normalize_accent(ctx: click.Context, param: click.Parameter, value: str | N
         if len(hex_part) == 3:
             hex_part = "".join(ch * 2 for ch in hex_part)
         return f"#{hex_part}"
-    names = ", ".join(sorted(_NAMED_ACCENTS))
-    raise click.BadParameter(f"use a hex value like #2563eb or a name ({names}).")
+    return None
+
+
+def _normalize_accent(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
+    if value is None:
+        return None
+    accent = _accent_hex(value)
+    if accent is None:
+        names = ", ".join(sorted(_NAMED_ACCENTS))
+        raise click.BadParameter(f"use a hex value like #2563eb or a name ({names}).")
+    return accent
+
+
+def _resolve_template(value: str) -> str | None:
+    lowered = value.strip().lower()
+    if lowered in available_templates():
+        return lowered
+    path = Path(value).expanduser()
+    if path.suffix == ".typ" and path.is_file():
+        return str(path)
+    return None
+
+
+def _template_callback(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
+    if value is None:
+        return None
+    resolved = _resolve_template(value)
+    if resolved is None:
+        choices = ", ".join(available_templates())
+        raise click.BadParameter(f"pick one of ({choices}) or a path to a .typ file.")
+    return resolved
+
+
+def _template_label(template: str) -> str:
+    return Path(template).stem if template.endswith(".typ") else template
+
+
+def _unique_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+    index = 1
+    while True:
+        candidate = path.with_name(f"{path.stem} ({index}){path.suffix}")
+        if not candidate.exists():
+            return candidate
+        index += 1
 
 
 def _print_issues(issues: list, filename: str) -> None:
@@ -95,12 +138,14 @@ def cli(ctx: click.Context) -> None:
 @click.argument("input_file", required=False, type=click.Path(exists=False))
 @click.option("-o", "--output", default=None, help="Output PDF file path.")
 @click.option("-t", "--title", default=None, help="Document title override.")
+@click.option("-s", "--subtitle", default=None, help="Subtitle shown under the title.")
 @click.option("-a", "--author", default=None, help="Author name override.")
+@click.option("--date", default=None, help="Date shown on the cover.")
 @click.option(
     "--template",
-    default=DEFAULT_TEMPLATE,
-    type=click.Choice(available_templates(), case_sensitive=False),
-    help="Layout to render with.",
+    default=None,
+    callback=_template_callback,
+    help="Built-in layout name or a path to a .typ template.",
 )
 @click.option(
     "--accent",
@@ -111,17 +156,23 @@ def cli(ctx: click.Context) -> None:
 @click.option("--bib", default=None, help="Path to a custom .bib file.")
 @click.option("--no-branding", "no_branding", is_flag=True, help="Hide the doc-engine attribution in the PDF.")
 @click.option("--dry-run", "dry_run", is_flag=True, help="Check the Markdown for errors without producing a PDF.")
+@click.option("-w", "--watch", "watch", is_flag=True, help="Rebuild automatically whenever the source changes.")
+@click.option("-f", "--force", "force", is_flag=True, help="Overwrite the output file instead of writing a new one.")
 @click.option("--open", "open_pdf", is_flag=True, help="Open the PDF after generation.")
 def build(
     input_file: str | None,
     output: str | None,
     title: str | None,
+    subtitle: str | None,
     author: str | None,
-    template: str,
+    date: str | None,
+    template: str | None,
     accent: str | None,
     bib: str | None,
     no_branding: bool,
     dry_run: bool,
+    watch: bool,
+    force: bool,
     open_pdf: bool,
 ) -> None:
     """Convert a Markdown file into a professional PDF document."""
@@ -151,75 +202,128 @@ def build(
         console.print(f"[bold red]Error:[/bold red] File not found — {input_path}")
         raise SystemExit(1)
 
-    markdown_content = input_path.read_text(encoding="utf-8")
-
-    issues = lint(markdown_content)
     if dry_run:
+        issues = lint(input_path.read_text(encoding="utf-8"))
         if issues:
             _print_issues(issues, str(input_path))
             errors = sum(1 for i in issues if i.severity == "error")
-            warnings = len(issues) - errors
-            console.print(f"\n[dim]{errors} error(s), {warnings} warning(s).[/dim]")
+            console.print(f"\n[dim]{errors} error(s), {len(issues) - errors} warning(s).[/dim]")
             raise SystemExit(1 if errors else 0)
         console.print("[bold green]✓[/bold green] No issues found.")
         return
 
-    if issues:
-        _print_issues(issues, str(input_path))
+    output_path = Path(output) if output else Path(f"{input_path.stem}_doc.pdf")
+    if not force:
+        output_path = _unique_path(output_path)
+
+    def run() -> bool:
+        raw = input_path.read_text(encoding="utf-8")
+        meta, content = frontmatter.parse(raw)
+
+        issues = lint(raw)
+        if issues:
+            _print_issues(issues, str(input_path))
+            console.print()
+            if has_errors(issues):
+                console.print("[bold red]Aborted:[/bold red] fix the errors above, or run [cyan]--dry-run[/cyan] to recheck.")
+                return False
+
+        resolved_template = template or _resolve_template(meta.get("template", DEFAULT_TEMPLATE))
+        if resolved_template is None:
+            console.print(f"[bold red]Error:[/bold red] Unknown template in front matter — {meta.get('template')}")
+            return False
+
+        resolved_accent = accent
+        if resolved_accent is None and meta.get("accent"):
+            resolved_accent = _accent_hex(meta["accent"])
+            if resolved_accent is None:
+                console.print(f"[bold yellow]Warning:[/bold yellow] Ignoring unknown accent — {meta['accent']}")
+
+        resolved_bib = _resolve_bib(bib or meta.get("bib"), cwd)
+        resolved_title = title or meta.get("title") or extract_title(content)
+        resolved_author = author or meta.get("author") or _detect_git_user()
+        resolved_subtitle = subtitle or meta.get("subtitle") or ""
+        resolved_date = date or meta.get("date")
+
+        console.print(f"  [dim]Title:[/dim]    [white]{resolved_title}[/white]")
+        console.print(f"  [dim]Author:[/dim]   [white]{resolved_author}[/white]")
+        console.print(f"  [dim]Template:[/dim] [white]{_template_label(resolved_template)}[/white]")
+        console.print(f"  [dim]Output:[/dim]   [cyan]{output_path}[/cyan]")
         console.print()
-        if has_errors(issues):
-            console.print("[bold red]Aborted:[/bold red] fix the errors above, or run [cyan]--dry-run[/cyan] to recheck.")
-            raise SystemExit(1)
 
-    resolved_bib = None
+        with console.status("[bold blue]Converting Markdown → Typst…[/bold blue]"):
+            conversion = convert_document(strip_first_heading(content), base_dir=input_path.parent)
+
+        with console.status("[bold blue]Compiling PDF…[/bold blue]"):
+            try:
+                compile_pdf(
+                    typst_body=conversion.body,
+                    title=resolved_title,
+                    author=resolved_author,
+                    subtitle=resolved_subtitle,
+                    date=resolved_date,
+                    output_path=str(output_path),
+                    bib_file=str(resolved_bib.resolve()) if resolved_bib else None,
+                    template=resolved_template,
+                    accent=resolved_accent,
+                    branding=not no_branding,
+                    version=__version__,
+                    assets=conversion.assets,
+                )
+            except Exception as exc:
+                message = getattr(exc, "message", None) or str(exc)
+                console.print(f"\n[bold red]Compilation failed:[/bold red] {message}")
+                for hint in getattr(exc, "hints", []) or []:
+                    console.print(f"  [dim]hint: {hint}[/dim]")
+                return False
+
+        console.print(f"[bold green]✓[/bold green] Generated → [bold cyan]{output_path}[/bold cyan]")
+        return True
+
+    ok = run()
+
+    if open_pdf and ok:
+        _open_file(str(output_path))
+
+    if watch:
+        _watch(input_path, run)
+    elif not ok:
+        raise SystemExit(1)
+
+
+def _resolve_bib(bib: str | None, cwd: Path) -> Path | None:
     if bib:
-        resolved_bib = Path(bib)
-        if not resolved_bib.exists():
-            console.print(f"[bold yellow]Warning:[/bold yellow] Bibliography file not found — {bib}")
-            resolved_bib = None
-    else:
-        resolved_bib = _find_file(cwd, _BIB_CANDIDATES)
-        if resolved_bib:
-            console.print(f"  [dim]Auto-detected bib:[/dim] [cyan]{resolved_bib.name}[/cyan]")
+        path = Path(bib)
+        if path.exists():
+            return path
+        console.print(f"[bold yellow]Warning:[/bold yellow] Bibliography file not found — {bib}")
+        return None
+    found = _find_file(cwd, _BIB_CANDIDATES)
+    if found:
+        console.print(f"  [dim]Auto-detected bib:[/dim] [cyan]{found.name}[/cyan]")
+    return found
 
-    resolved_title = title or extract_title(markdown_content)
-    resolved_author = author or _detect_git_user()
-    resolved_output = output or f"{input_path.stem}_doc.pdf"
 
-    console.print(f"  [dim]Title:[/dim]    [white]{resolved_title}[/white]")
-    console.print(f"  [dim]Author:[/dim]   [white]{resolved_author}[/white]")
-    console.print(f"  [dim]Template:[/dim] [white]{template}[/white]")
-    console.print(f"  [dim]Output:[/dim]   [cyan]{resolved_output}[/cyan]")
-    console.print()
+def _watch(input_path: Path, run) -> None:
+    console.print("\n[dim]Watching for changes — press Ctrl+C to stop.[/dim]")
+    last = _mtime(input_path)
+    try:
+        while True:
+            time.sleep(0.5)
+            current = _mtime(input_path)
+            if current != last:
+                last = current
+                console.rule(f"[dim]{time.strftime('%H:%M:%S')} — rebuilding[/dim]")
+                run()
+    except KeyboardInterrupt:
+        console.print("\n[dim]Stopped.[/dim]")
 
-    with console.status("[bold blue]Converting Markdown → Typst…[/bold blue]"):
-        stripped = strip_first_heading(markdown_content)
-        typst_body = convert(stripped)
 
-    with console.status("[bold blue]Compiling PDF…[/bold blue]"):
-        try:
-            compile_pdf(
-                typst_body=typst_body,
-                title=resolved_title,
-                author=resolved_author,
-                output_path=resolved_output,
-                bib_file=str(resolved_bib.resolve()) if resolved_bib else None,
-                template=template,
-                accent=accent,
-                branding=not no_branding,
-                version=__version__,
-            )
-        except Exception as exc:
-            message = getattr(exc, "message", None) or str(exc)
-            console.print(f"\n[bold red]Compilation failed:[/bold red] {message}")
-            for hint in getattr(exc, "hints", []) or []:
-                console.print(f"  [dim]hint: {hint}[/dim]")
-            raise SystemExit(1)
-
-    console.print(f"[bold green]✓[/bold green] Generated → [bold cyan]{resolved_output}[/bold cyan]")
-
-    if open_pdf:
-        _open_file(resolved_output)
+def _mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 @cli.command()
@@ -234,7 +338,7 @@ def info() -> None:
         "[dim]Common usage[/dim]\n"
         "  doc-engine build\n"
         "  doc-engine build README.md --template modern --accent teal\n"
-        "  doc-engine build --dry-run\n\n"
+        "  doc-engine build --watch\n\n"
         "[dim]Run[/dim] [cyan]doc-engine --help[/cyan] [dim]for every command and flag.[/dim]"
     )
     console.print(Panel(body, border_style="blue", padding=(1, 2), title="info"))

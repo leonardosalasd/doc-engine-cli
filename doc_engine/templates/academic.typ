@@ -1,5 +1,6 @@
 #let setup_doc(
   title: "",
+  subtitle: "",
   author: "Anonymous",
   date: datetime.today().display(),
   bibliography_file: none,
@@ -88,6 +89,10 @@
   align(left + horizon)[
     #v(-10%)
     #text(font: "Inter", size: 38pt, weight: 800, tracking: -1.5pt, fill: primary)[#title]
+    #if subtitle != "" [
+      #v(0.8em)
+      #text(font: "Inter", size: 15pt, weight: 400, fill: muted)[#subtitle]
+    ]
     #v(2.5em)
     #block(stroke: (left: 4pt + accent-color), inset: (left: 1.5em))[
       #text(font: "Inter", size: 12pt, weight: 600, fill: primary)[#author]

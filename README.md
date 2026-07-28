@@ -44,10 +44,13 @@ That's it. Zero configuration required.
 | Feature | Description |
 |---|---|
 | **Zero-Config** | Auto-detects `README.md`, Git author, and document title. No setup files needed. |
-| **Five Templates** | Academic, modern, minimal, technical, and book layouts, each with a configurable accent color. |
+| **Five Templates** | Academic, modern, minimal, technical, and book layouts, each with a configurable accent color. Point `--template` at your own `.typ` file to go further. |
+| **Front Matter** | An optional `---` metadata block sets the title, subtitle, author, template, and accent right inside the file. |
+| **Watch Mode** | `--watch` rebuilds the PDF every time you save the source. |
+| **Rich Markdown** | Embeds local images, renders GitHub task lists as real checkboxes, and turns `[^1]` footnotes into native Typst footnotes. |
 | **Error Checking** | Reports source problems with line and column before compiling. A `--dry-run` mode runs the check on its own. |
+| **Non-Destructive** | Never overwrites an existing PDF — writes `report (1).pdf`, `report (2).pdf`, … unless you pass `--force`. |
 | **Premium Typography** | Inter font family with fallback chain, justified text, and optimized line spacing. |
-| **Code-Centric** | Syntax-highlighted code blocks with Cascadia Code font and GitHub-style backgrounds. |
 | **Pure Python** | No external binaries required (no Pandoc, no LaTeX). Ships as a single `pip install`. |
 | **Cross-Platform** | Works on Windows, macOS, and Linux with Python 3.10+. |
 
@@ -121,13 +124,19 @@ doc-engine --help               Show all commands and flags
 | `INPUT_FILE` | auto-detect `README.md` | Path to the Markdown file to convert. |
 | `-o, --output` | `<input>_doc.pdf` | Output PDF path. |
 | `-t, --title` | first `# heading` | Document title override. |
+| `-s, --subtitle` | none | Subtitle shown under the title on the cover. |
 | `-a, --author` | `git config user.name` | Author name override. |
-| `--template` | `academic` | Layout to render with: `academic`, `modern`, `minimal`, `technical`, `book`. |
+| `--date` | today | Date shown on the cover. |
+| `--template` | `academic` | A built-in layout (`academic`, `modern`, `minimal`, `technical`, `book`) or a path to your own `.typ` file. |
 | `--accent` | template default | Accent color as a hex value (`#2563eb`) or a name (`blue`, `teal`, `rose`, ...). |
 | `--bib` | auto-detect `refs.bib` | Path to a custom `.bib` file for the bibliography. |
 | `--no-branding` | off | Hide the `doc-engine` attribution from the PDF. |
 | `--dry-run` | off | Check the Markdown for errors and exit without writing a PDF. |
+| `-w, --watch` | off | Rebuild automatically whenever the source file changes. |
+| `-f, --force` | off | Overwrite the output file instead of writing a numbered copy. |
 | `--open` | off | Open the PDF after it is generated. |
+
+Any flag can also be set in the front matter (see below); a flag on the command line always wins.
 
 ### Examples
 
@@ -169,10 +178,60 @@ doc-engine build --no-branding
 doc-engine build --open
 ```
 
+**Rebuild on every save:**
+```bash
+doc-engine build --watch
+```
+
 **Use as Python module:**
 ```bash
 python -m doc_engine build README.md
 ```
+
+---
+
+## Front Matter
+
+Any Markdown file can open with a `---` block to carry its own settings, so the
+document renders the same way for everyone — no flags to remember:
+
+```markdown
+---
+title: Payments API
+subtitle: Integration Guide
+author: Platform Team
+template: technical
+accent: teal
+---
+
+# Payments API
+
+...
+```
+
+Supported keys: `title`, `subtitle`, `author`, `date`, `template`, `accent`, and
+`bib`. A flag passed on the command line overrides the matching front-matter key,
+which in turn overrides the auto-detected value.
+
+---
+
+## Watch Mode
+
+Pass `--watch` to keep `doc-engine` running and rebuild the PDF whenever you save
+the source. It's the fastest way to tweak a template or accent and see the result:
+
+<div align="center">
+<img src="assets/features-v1.1.gif" alt="doc-engine watch mode rebuilding on save" width="800"/>
+<br>
+<em>Metadata read from front matter, rebuilt live on every save.</em>
+</div>
+
+```bash
+doc-engine build --watch --template modern --accent teal
+```
+
+The output path is chosen once when watch starts, then rewritten in place on each
+change. Press `Ctrl+C` to stop.
 
 ---
 
@@ -194,6 +253,33 @@ doc-engine build --template modern --accent rose
 ```
 
 Accent colors take a hex value (`#0ea5e9`) or one of these names: `blue`, `sky`, `indigo`, `violet`, `purple`, `red`, `rose`, `orange`, `amber`, `green`, `emerald`, `teal`, `slate`, `black`.
+
+### Bring your own template
+
+`--template` also accepts a path to a `.typ` file, so you can ship a house style
+without forking the project:
+
+```bash
+doc-engine build --template ./corporate.typ
+```
+
+The quickest way to start is to copy one of the files in
+[`doc_engine/templates/`](doc_engine/templates) and edit it. A template exposes a
+single `setup_doc` entry point, and the compiler passes it the document metadata:
+
+```typ
+#let setup_doc(
+  title: "",
+  subtitle: "",
+  author: "Anonymous",
+  date: datetime.today().display(),
+  bibliography_file: none,
+  accent: none,
+  branding: true,
+  version: "",
+  body,
+) = { ... }
+```
 
 ---
 
@@ -273,6 +359,9 @@ The converter module parses Markdown using [`mistune`](https://github.com/leptur
 | `[text](url)` | `#link("url")[text]` |
 | `- item` | `- item` |
 | `1. item` | `+ item` |
+| `- [x] task` | rendered checkbox |
+| `text[^1]` | `#footnote[...]` |
+| `![alt](local.png)` | `#image("local.png")` |
 | `> blockquote` | `#block(...)` |
 | `---` | `#line(...)` |
 
@@ -392,8 +481,9 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build
 - [x] Tables
 - [x] Horizontal rules
 - [x] Line breaks (`<br>`)
-- [ ] Images (rendered as alt-text; remote images not embedded)
-- [ ] Footnotes
+- [x] Task lists (`- [x]` / `- [ ]`)
+- [x] Footnotes (`[^1]`)
+- [x] Local images (remote images still render as alt-text)
 - [ ] Math blocks
 
 ---
@@ -403,10 +493,12 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build
 - [x] Template selection via `--template` flag
 - [x] Configurable accent color via `--accent`
 - [x] Source error checking with line/column and `--dry-run`
-- [ ] User-supplied template files (point `--template` at a path)
+- [x] User-supplied template files (point `--template` at a path)
+- [x] YAML front-matter support for metadata override
+- [x] Local image embedding
+- [x] Watch mode for continuous rebuilds
 - [ ] Multi-file documentation merge
 - [ ] Image downloading and embedding for remote URLs
-- [ ] YAML front-matter support for metadata override
 - [ ] PDF/A compliance for archival
 
 ---
