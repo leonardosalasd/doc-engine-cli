@@ -14,6 +14,14 @@ def available_templates() -> list[str]:
 
 
 def template_path(name: str) -> Path:
+    """Resolve a template identifier to a `.typ` file.
+
+    A bare name refers to a bundled template; anything else is treated as a
+    path to a user-supplied one.
+    """
+    candidate = Path(name)
+    if candidate.suffix == ".typ":
+        return candidate
     return _TEMPLATES_DIR / f"{name}.typ"
 
 
@@ -27,6 +35,9 @@ def compile_pdf(
     accent: str | None = None,
     branding: bool = True,
     version: str = "",
+    subtitle: str = "",
+    date: str | None = None,
+    assets: dict[str, str] | None = None,
 ) -> None:
     source = template_path(template)
     if not source.exists():
@@ -45,11 +56,19 @@ def compile_pdf(
                 shutil.copy(bib_path, tmp / bib_path.name)
                 bib_inject = f'"{bib_path.name}"'
 
+        for name, origin in (assets or {}).items():
+            destination = tmp / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(origin, destination)
+
         accent_inject = f'rgb("{accent}")' if accent else "none"
 
         main_file = tmp / "main.typ"
         main_file.write_text(
-            _build_main(typst_body, title, author, bib_inject, accent_inject, branding, version),
+            _build_main(
+                typst_body, title, author, bib_inject, accent_inject,
+                branding, version, subtitle, date,
+            ),
             encoding="utf-8",
         )
 
@@ -64,14 +83,17 @@ def _build_main(
     accent_inject: str,
     branding: bool,
     version: str,
+    subtitle: str = "",
+    date: str | None = None,
 ) -> str:
-    safe_title = title.replace('"', '\\"')
-    safe_author = author.replace('"', '\\"')
+    date_line = f'  date: "{_escape(date)}",\n' if date else ""
     return (
         '#import "template.typ": setup_doc\n\n'
         "#show: setup_doc.with(\n"
-        f'  title: "{safe_title}",\n'
-        f'  author: "{safe_author}",\n'
+        f'  title: "{_escape(title)}",\n'
+        f'  subtitle: "{_escape(subtitle)}",\n'
+        f'  author: "{_escape(author)}",\n'
+        f"{date_line}"
         f"  bibliography_file: {bib_inject},\n"
         f"  accent: {accent_inject},\n"
         f"  branding: {'true' if branding else 'false'},\n"
@@ -79,3 +101,7 @@ def _build_main(
         ")\n\n"
         f"{body}"
     )
+
+
+def _escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')

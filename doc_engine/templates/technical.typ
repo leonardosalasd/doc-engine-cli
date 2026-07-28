@@ -1,5 +1,6 @@
 #let setup_doc(
   title: "",
+  subtitle: "",
   author: "Anonymous",
   date: datetime.today().display(),
   bibliography_file: none,
@@ -94,6 +95,10 @@
     #text(font: ("Cascadia Code", "Consolas"), size: 9pt, fill: white.transparentize(20%))[TECHNICAL DOCUMENT]
     #v(1.2em)
     #text(font: "Inter", size: 34pt, weight: 800, tracking: -1pt)[#title]
+    #if subtitle != "" [
+      #v(0.7em)
+      #text(font: "Inter", size: 14pt, weight: 400, fill: white.transparentize(15%))[#subtitle]
+    ]
   ]
   v(2em)
   grid(

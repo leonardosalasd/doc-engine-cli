@@ -1,5 +1,6 @@
 #let setup_doc(
   title: "",
+  subtitle: "",
   author: "Anonymous",
   date: datetime.today().display(),
   bibliography_file: none,
@@ -84,6 +85,10 @@
     #line(length: 40%, stroke: 0.75pt + accent-color)
     #v(1.5em)
     #text(size: 32pt, weight: 700, fill: ink, style: "italic")[#title]
+    #if subtitle != "" [
+      #v(1em)
+      #text(size: 14pt, weight: 400, fill: muted, style: "italic")[#subtitle]
+    ]
     #v(1.5em)
     #line(length: 40%, stroke: 0.75pt + accent-color)
     #v(3em)

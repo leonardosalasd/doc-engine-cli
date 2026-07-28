@@ -1,4 +1,6 @@
 import re
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import mistune
@@ -16,6 +18,19 @@ _TYPST_ESCAPES = {
     ">": "\\>",
 }
 
+_PLUGINS = ["table", "strikethrough", "task_lists", "footnotes"]
+_REMOTE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:)?//", re.IGNORECASE)
+_UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
+
+_UNCHECKED = (
+    '#box(width: 0.85em, height: 0.85em, radius: 2pt, '
+    'stroke: 1pt + rgb("#94a3b8"), baseline: 0.15em)'
+)
+_CHECKED = (
+    '#box(width: 0.85em, height: 0.85em, radius: 2pt, fill: rgb("#16a34a"), '
+    'baseline: 0.15em)[#align(center + horizon)[#text(fill: white, size: 0.62em, weight: 700)[✓]]]'
+)
+
 
 def _escape(text: str) -> str:
     return "".join(_TYPST_ESCAPES.get(ch, ch) for ch in text)
@@ -28,12 +43,22 @@ def _render_children(renderer: mistune.BaseRenderer, token: dict, state: Any) ->
     return renderer.render_tokens(children, state)
 
 
+@dataclass
+class Conversion:
+    body: str
+    assets: dict[str, str] = field(default_factory=dict)
+
+
 class TypstRenderer(mistune.BaseRenderer):
     NAME = "typst"
 
-    def __init__(self) -> None:
+    def __init__(self, base_dir: Path | None = None) -> None:
         super().__init__()
         self._ordered_stack: list[bool] = []
+        self._base_dir = base_dir
+        self._footnotes: dict[str, str] = {}
+        self._asset_names: dict[str, str] = {}
+        self.assets: dict[str, str] = {}
 
     def text(self, token: dict, state: Any) -> str:
         return _escape(token["raw"])
@@ -54,8 +79,12 @@ class TypstRenderer(mistune.BaseRenderer):
         return f'#link("{url}")[{children}]'
 
     def image(self, token: dict, state: Any) -> str:
-        alt = token.get("attrs", {}).get("alt", "")
-        return f"[{_escape(alt)}]" if alt else ""
+        url = token.get("attrs", {}).get("url", "")
+        alt = _render_children(self, token, state)
+        asset = self._register_image(url)
+        if asset is None:
+            return f"[{alt}]" if alt else ""
+        return f'#image("{asset}")'
 
     def linebreak(self, token: dict, state: Any) -> str:
         return "\\\n"
@@ -71,6 +100,11 @@ class TypstRenderer(mistune.BaseRenderer):
         if raw in ("<br>", "<br/>", "<br />"):
             return "\\\n"
         return ""
+
+    def footnote_ref(self, token: dict, state: Any) -> str:
+        key = token["raw"]
+        body = self._footnotes.get(key, "")
+        return f"#footnote[{body}]"
 
     def blank_line(self, token: dict, state: Any) -> str:
         return ""
@@ -121,10 +155,22 @@ class TypstRenderer(mistune.BaseRenderer):
                 result += f"  {extra}\n"
         return result
 
+    def task_list_item(self, token: dict, state: Any) -> str:
+        checked = token.get("attrs", {}).get("checked", False)
+        box = _CHECKED if checked else _UNCHECKED
+        body = " ".join(_render_children(self, token, state).split())
+        return f"{box} {body} \\\n"
+
     def thematic_break(self, token: dict, state: Any) -> str:
         return '\n#line(length: 100%, stroke: 0.5pt + rgb("#d0d0d0"))\n\n'
 
     def block_html(self, token: dict, state: Any) -> str:
+        return ""
+
+    def footnotes(self, token: dict, state: Any) -> str:
+        return ""
+
+    def footnote_item(self, token: dict, state: Any) -> str:
         return ""
 
     def table(self, token: dict, state: Any) -> str:
@@ -174,20 +220,47 @@ class TypstRenderer(mistune.BaseRenderer):
     def table_cell(self, token: dict, state: Any) -> str:
         return _render_children(self, token, state)
 
+    def load_footnotes(self, tokens: list[dict], state: Any) -> None:
+        for token in tokens:
+            if token.get("type") != "footnotes":
+                continue
+            for item in token.get("children", []):
+                key = item.get("attrs", {}).get("key")
+                if key is None:
+                    continue
+                rendered = _render_children(self, item, state)
+                self._footnotes[str(key)] = " ".join(rendered.split())
+
+    def _register_image(self, url: str) -> str | None:
+        if not url or self._base_dir is None or _REMOTE.match(url) or url.startswith("data:"):
+            return None
+        source = (self._base_dir / url).expanduser()
+        if not source.is_file():
+            return None
+        resolved = str(source.resolve())
+        if resolved in self._asset_names:
+            return self._asset_names[resolved]
+        name = f"assets/{len(self.assets)}_{_UNSAFE.sub('_', source.name)}"
+        self._asset_names[resolved] = name
+        self.assets[name] = resolved
+        return name
+
     def finalize(self, data: str, state: Any) -> str:
         return data
 
 
-def convert(markdown: str) -> str:
-    renderer = TypstRenderer()
-    md = mistune.create_markdown(
-        renderer=renderer,
-        plugins=["table", "strikethrough"],
-    )
-    typst_str = md(markdown)
-    # Translate Pandoc syntax [@citation_key] back to native Typst @citation_key
-    typst_str = re.sub(r'\[\\@([a-zA-Z0-9_\-]+)\]', r'@\1', typst_str)
-    return typst_str
+def convert_document(markdown: str, base_dir: Path | None = None) -> Conversion:
+    renderer = TypstRenderer(base_dir=base_dir)
+    md = mistune.create_markdown(renderer=None, plugins=_PLUGINS)
+    tokens, state = md.parse(markdown)
+    renderer.load_footnotes(tokens, state)
+    body = renderer.render_tokens(tokens, state)
+    body = re.sub(r"\[\\@([a-zA-Z0-9_\-]+)\]", r"@\1", body)
+    return Conversion(body=body, assets=renderer.assets)
+
+
+def convert(markdown: str, base_dir: Path | None = None) -> str:
+    return convert_document(markdown, base_dir).body
 
 
 def extract_title(markdown: str) -> str:
