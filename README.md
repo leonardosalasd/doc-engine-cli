@@ -220,6 +220,12 @@ which in turn overrides the auto-detected value.
 Pass `--watch` to keep `doc-engine` running and rebuild the PDF whenever you save
 the source. It's the fastest way to tweak a template or accent and see the result:
 
+<div align="center">
+<img src="assets/features-v1.1.gif" alt="doc-engine watch mode rebuilding on save" width="800"/>
+<br>
+<em>Metadata read from front matter, rebuilt live on every save.</em>
+</div>
+
 ```bash
 doc-engine build --watch --template modern --accent teal
 ```
