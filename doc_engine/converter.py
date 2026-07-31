@@ -1,3 +1,15 @@
+"""Markdown to Typst transpiler built on a mistune renderer.
+
+`from __future__ import annotations` is required, not cosmetic: mistune resolves
+tokens to methods by name, so this renderer must define one called `list`, which
+shadows the builtin inside the class body. Any annotation written there — such as
+`tokens: list[dict]` — would otherwise be evaluated against that method and raise
+`TypeError: 'function' object is not subscriptable` on import. Python 3.14 defers
+annotations by default and hides the problem; every earlier version does not.
+"""
+
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,11 +28,16 @@ _TYPST_ESCAPES = {
     "~": "\\~",
     "<": "\\<",
     ">": "\\>",
+    "[": "\\[",
+    "]": "\\]",
 }
 
 _PLUGINS = ["table", "strikethrough", "task_lists", "footnotes"]
 _REMOTE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:)?//", re.IGNORECASE)
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
+
+# Pandoc-style [@key] survives escaping as \[\@key\]; restore it as a Typst @key.
+_CITATION = re.compile(r"\\\[\\@([a-zA-Z0-9_\-]+)\\\]")
 
 _UNCHECKED = (
     '#box(width: 0.85em, height: 0.85em, radius: 2pt, '
@@ -255,7 +272,7 @@ def convert_document(markdown: str, base_dir: Path | None = None) -> Conversion:
     tokens, state = md.parse(markdown)
     renderer.load_footnotes(tokens, state)
     body = renderer.render_tokens(tokens, state)
-    body = re.sub(r"\[\\@([a-zA-Z0-9_\-]+)\]", r"@\1", body)
+    body = _CITATION.sub(r"@\1", body)
     return Conversion(body=body, assets=renderer.assets)
 
 

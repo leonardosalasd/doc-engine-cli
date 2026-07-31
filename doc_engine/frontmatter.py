@@ -11,7 +11,9 @@ same file renders the same way no matter who runs it:
     ---
 
 Only flat `key: value` pairs are supported — enough for document metadata,
-without pulling in a YAML dependency.
+without pulling in a YAML dependency. A leading block that carries no pairs is
+left alone, so a document that simply opens with a `---` horizontal rule keeps
+its content.
 """
 
 _FENCE = "---"
@@ -27,6 +29,8 @@ def parse(text: str) -> tuple[dict[str, str], str]:
     for index in range(1, len(lines)):
         line = lines[index]
         if line.strip() == _FENCE:
+            if not meta:
+                break
             body = "\n".join(lines[index + 1 :])
             return meta, body.lstrip("\n")
         key, value = _split(line)

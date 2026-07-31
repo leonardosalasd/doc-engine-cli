@@ -497,7 +497,9 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build
 - [x] YAML front-matter support for metadata override
 - [x] Local image embedding
 - [x] Watch mode for continuous rebuilds
+- [ ] Math expressions (LaTeX-style `$...$`)
 - [ ] Multi-file documentation merge
+- [ ] Mermaid diagram rendering
 - [ ] Image downloading and embedding for remote URLs
 - [ ] PDF/A compliance for archival
 
