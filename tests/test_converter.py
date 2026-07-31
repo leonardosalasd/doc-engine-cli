@@ -1,9 +1,21 @@
 from doc_engine.converter import (
+    TypstRenderer,
     convert,
     convert_document,
     extract_title,
     strip_first_heading,
 )
+
+
+class TestPythonCompatibility:
+    """Guards the regression that made 1.1.0 unimportable below Python 3.14."""
+
+    def test_class_body_annotations_are_not_evaluated(self) -> None:
+        annotations = TypstRenderer.load_footnotes.__annotations__
+        assert annotations["tokens"] == "list[dict]"
+
+    def test_list_is_shadowed_inside_the_class(self) -> None:
+        assert callable(TypstRenderer.list)
 
 
 class TestEscaping:
@@ -15,6 +27,22 @@ class TestEscaping:
 
     def test_at_is_escaped(self) -> None:
         assert "\\@" in convert("Email user@example.com")
+
+
+class TestBrackets:
+    def test_square_brackets_are_escaped(self) -> None:
+        assert "\\[42\\]" in convert("See item [42] here.")
+
+    def test_lone_closing_bracket_is_escaped(self) -> None:
+        assert "\\]" in convert("Close it with ] here.")
+
+
+class TestCitations:
+    def test_pandoc_citation_becomes_typst_reference(self) -> None:
+        assert "@smith2020" in convert("As shown in [@smith2020].")
+
+    def test_citation_loses_its_brackets(self) -> None:
+        assert "\\[" not in convert("As shown in [@smith2020].")
 
 
 class TestExtractTitle:
