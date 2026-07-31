@@ -14,7 +14,15 @@ from doc_engine.compiler import DEFAULT_TEMPLATE, available_templates, compile_p
 from doc_engine.converter import convert_document, extract_title, strip_first_heading
 from doc_engine.linter import has_errors, lint
 
-console = Console()
+if sys.platform == "win32":
+    # Legacy Windows consoles (cp1252 and similar) can't encode the arrows and
+    # checkmarks below and crash on the first console.print(). Reconfiguring the
+    # streams and skipping Rich's legacy renderer keeps output on every console.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+
+console = Console(legacy_windows=False) if sys.platform == "win32" else Console()
 
 REPO_URL = "https://github.com/leonardosalasd/doc-engine-cli"
 
