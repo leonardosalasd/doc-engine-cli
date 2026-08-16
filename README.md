@@ -9,7 +9,7 @@
 [![PyPI](https://img.shields.io/pypi/v/doc-engine-cli.svg?logo=pypi&logoColor=white&color=006DAD)](https://pypi.org/project/doc-engine-cli/)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/doc-engine-cli?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/doc-engine-cli)
 [![Typst](https://img.shields.io/badge/Powered_by-Typst-239DAD.svg?logo=typst&logoColor=white)](https://typst.app/)
-[![Code style: black](https://img.shields.io/badge/code_style-black-000000.svg)](https://github.com/psf/black)
+[![Tests](https://github.com/leonardosalasd/doc-engine-cli/actions/workflows/tests.yml/badge.svg)](https://github.com/leonardosalasd/doc-engine-cli/actions/workflows/tests.yml)
 
 Transform any `README.md` into a premium, print-ready PDF report — no configuration, no templates, no LaTeX.
 
@@ -507,13 +507,19 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build
 
 ## Contributing
 
-Contributions are welcome. Please follow these guidelines:
+Contributions are welcome — bug reports, documentation fixes, new templates, and
+features. The [contributing guide](CONTRIBUTING.md) covers setup, testing across
+Python versions, code style, and how to add a template.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Write tests for new functionality
-4. Ensure all tests pass (`python -m pytest tests/ -v`)
-5. Submit a pull request
+| | |
+|---|---|
+| [Contributing guide](CONTRIBUTING.md) | Setup, tests, style, pull requests |
+| [Code of conduct](CODE_OF_CONDUCT.md) | Expected behavior in community spaces |
+| [Security policy](SECURITY.md) | Reporting a vulnerability privately |
+| [Support](SUPPORT.md) | Where to ask questions and report problems |
+
+Questions belong in [Discussions](https://github.com/leonardosalasd/doc-engine-cli/discussions/categories/q-a);
+bugs belong in [Issues](https://github.com/leonardosalasd/doc-engine-cli/issues).
 
 ---
 
