@@ -17,6 +17,8 @@ from typing import Any
 
 import mistune
 
+from doc_engine import diagrams
+
 _TYPST_ESCAPES = {
     "\\": "\\\\",
     "#": "\\#",
@@ -62,8 +64,16 @@ def _render_children(renderer: mistune.BaseRenderer, token: dict, state: Any) ->
 
 @dataclass
 class Conversion:
+    """Typst markup plus everything the compiler must place beside it.
+
+    `assets` maps a sandbox-relative name to a file on disk to copy. `generated`
+    maps a name to content produced during conversion, such as a rendered
+    diagram, which has no file of its own.
+    """
+
     body: str
     assets: dict[str, str] = field(default_factory=dict)
+    generated: dict[str, str] = field(default_factory=dict)
 
 
 class TypstRenderer(mistune.BaseRenderer):
@@ -76,6 +86,7 @@ class TypstRenderer(mistune.BaseRenderer):
         self._footnotes: dict[str, str] = {}
         self._asset_names: dict[str, str] = {}
         self.assets: dict[str, str] = {}
+        self.generated: dict[str, str] = {}
 
     def text(self, token: dict, state: Any) -> str:
         return _escape(token["raw"])
@@ -101,7 +112,7 @@ class TypstRenderer(mistune.BaseRenderer):
         asset = self._register_image(url)
         if asset is None:
             return f"[{alt}]" if alt else ""
-        return f'#image("{asset}")'
+        return f'#fit-image("{asset}")'
 
     def linebreak(self, token: dict, state: Any) -> str:
         return "\\\n"
@@ -142,7 +153,15 @@ class TypstRenderer(mistune.BaseRenderer):
         info = token.get("attrs", {}).get("info", "") or ""
         lang = info.split()[0] if info else ""
         code = token["raw"]
+        if lang and diagrams.is_diagram(lang):
+            return self._render_diagram(lang, code)
         return f"\n```{lang}\n{code}```\n\n"
+
+    def _render_diagram(self, language: str, source: str) -> str:
+        svg = diagrams.render(language, source)
+        name = f"assets/diagram_{len(self.generated)}.svg"
+        self.generated[name] = svg
+        return f'\n#align(center)[#fit-image("{name}")]\n\n'
 
     def block_quote(self, token: dict, state: Any) -> str:
         content = _render_children(self, token, state).strip()
@@ -273,7 +292,7 @@ def convert_document(markdown: str, base_dir: Path | None = None) -> Conversion:
     renderer.load_footnotes(tokens, state)
     body = renderer.render_tokens(tokens, state)
     body = _CITATION.sub(r"@\1", body)
-    return Conversion(body=body, assets=renderer.assets)
+    return Conversion(body=body, assets=renderer.assets, generated=renderer.generated)
 
 
 def convert(markdown: str, base_dir: Path | None = None) -> str:

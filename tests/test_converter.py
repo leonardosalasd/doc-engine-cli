@@ -141,7 +141,7 @@ class TestImages:
         (tmp_path / "logo.png").write_bytes(b"\x89PNG\r\n")
         conversion = convert_document("![logo](logo.png)", base_dir=tmp_path)
         name = next(iter(conversion.assets))
-        assert f'#image("{name}")' in conversion.body
+        assert f'#fit-image("{name}")' in conversion.body
         assert conversion.assets[name].endswith("logo.png")
 
     def test_repeated_image_is_registered_once(self, tmp_path) -> None:

@@ -38,6 +38,7 @@ def compile_pdf(
     subtitle: str = "",
     date: str | None = None,
     assets: dict[str, str] | None = None,
+    generated: dict[str, str] | None = None,
 ) -> None:
     source = template_path(template)
     if not source.exists():
@@ -61,6 +62,11 @@ def compile_pdf(
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(origin, destination)
 
+        for name, content in (generated or {}).items():
+            destination = tmp / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(content, encoding="utf-8")
+
         accent_inject = f'rgb("{accent}")' if accent else "none"
 
         main_file = tmp / "main.typ"
@@ -73,6 +79,17 @@ def compile_pdf(
         )
 
         typst.compile(str(main_file), output=resolved_output)
+
+
+# Pictures keep their natural size unless they are too wide for the text block,
+# in which case they shrink to fit. Forcing every image to full width blows up
+# small diagrams; leaving them unconstrained lets big ones run off the page.
+_FIT_IMAGE = """#let fit-image(path) = context {
+  let img = image(path)
+  let natural = measure(img)
+  layout(area => if natural.width > area.width { image(path, width: 100%) } else { img })
+}
+"""
 
 
 def _build_main(
@@ -89,6 +106,7 @@ def _build_main(
     date_line = f'  date: "{_escape(date)}",\n' if date else ""
     return (
         '#import "template.typ": setup_doc\n\n'
+        f"{_FIT_IMAGE}\n"
         "#show: setup_doc.with(\n"
         f'  title: "{_escape(title)}",\n'
         f'  subtitle: "{_escape(subtitle)}",\n'

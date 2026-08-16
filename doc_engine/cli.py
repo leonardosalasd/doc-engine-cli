@@ -12,6 +12,7 @@ from rich.panel import Panel
 from doc_engine import __version__, frontmatter
 from doc_engine.compiler import DEFAULT_TEMPLATE, available_templates, compile_pdf
 from doc_engine.converter import convert_document, extract_title, strip_first_heading
+from doc_engine.diagrams import DiagramError
 from doc_engine.linter import has_errors, lint
 
 if sys.platform == "win32":
@@ -260,7 +261,13 @@ def build(
         console.print()
 
         with console.status("[bold blue]Converting Markdown → Typst…[/bold blue]"):
-            conversion = convert_document(strip_first_heading(content), base_dir=input_path.parent)
+            try:
+                conversion = convert_document(strip_first_heading(content), base_dir=input_path.parent)
+            except DiagramError as exc:
+                console.print(
+                    f"\n[bold red]Diagram failed:[/bold red] {exc.language} block — {exc.message}"
+                )
+                return False
 
         with console.status("[bold blue]Compiling PDF…[/bold blue]"):
             try:
@@ -277,6 +284,7 @@ def build(
                     branding=not no_branding,
                     version=__version__,
                     assets=conversion.assets,
+                    generated=conversion.generated,
                 )
             except Exception as exc:
                 message = getattr(exc, "message", None) or str(exc)
