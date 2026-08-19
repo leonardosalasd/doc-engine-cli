@@ -17,7 +17,7 @@ from typing import Any
 
 import mistune
 
-from doc_engine import diagrams
+from doc_engine import diagrams, latex
 
 _TYPST_ESCAPES = {
     "\\": "\\\\",
@@ -35,6 +35,14 @@ _TYPST_ESCAPES = {
 }
 
 _PLUGINS = ["table", "strikethrough", "task_lists", "footnotes"]
+
+_BLOCK_MATH = r"^ {0,3}\$\$[ \t]*\n(?P<math_text>[\s\S]+?)\n\$\$[ \t]*$"
+
+# mistune's own inline rule writes the closing guard as a lookahead where it
+# needs a lookbehind, so "it costs $10 and $20" parses the middle as math and
+# mangles it. Requiring no space beside either delimiter, and no digit after the
+# closing one, keeps prices and shell variables out of math mode.
+_INLINE_MATH = r"\$(?!\s)(?P<math_text>(?:[^$\\\n]|\\.)+?)(?<!\s)\$(?!\d)"
 _REMOTE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:)?//", re.IGNORECASE)
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 
@@ -53,6 +61,21 @@ _CHECKED = (
 
 def _escape(text: str) -> str:
     return "".join(_TYPST_ESCAPES.get(ch, ch) for ch in text)
+
+
+def _math_plugin(md: mistune.Markdown) -> None:
+    """Register math parsing with a stricter inline rule than mistune ships."""
+
+    def parse_block(block: Any, match: Any, state: Any) -> int:
+        state.append_token({"type": "block_math", "raw": match.group("math_text")})
+        return match.end() + 1
+
+    def parse_inline(inline: Any, match: Any, state: Any) -> int:
+        state.append_token({"type": "inline_math", "raw": match.group("math_text")})
+        return match.end()
+
+    md.block.register("block_math", _BLOCK_MATH, parse_block, before="list")
+    md.inline.register("inline_math", _INLINE_MATH, parse_inline, before="link")
 
 
 def _render_children(renderer: mistune.BaseRenderer, token: dict, state: Any) -> str:
@@ -128,6 +151,12 @@ class TypstRenderer(mistune.BaseRenderer):
         if raw in ("<br>", "<br/>", "<br />"):
             return "\\\n"
         return ""
+
+    def inline_math(self, token: dict, state: Any) -> str:
+        return f"${latex.to_typst(token['raw'])}$"
+
+    def block_math(self, token: dict, state: Any) -> str:
+        return f"\n$ {latex.to_typst(token['raw'])} $\n\n"
 
     def footnote_ref(self, token: dict, state: Any) -> str:
         key = token["raw"]
@@ -287,7 +316,7 @@ class TypstRenderer(mistune.BaseRenderer):
 
 def convert_document(markdown: str, base_dir: Path | None = None) -> Conversion:
     renderer = TypstRenderer(base_dir=base_dir)
-    md = mistune.create_markdown(renderer=None, plugins=_PLUGINS)
+    md = mistune.create_markdown(renderer=None, plugins=[*_PLUGINS, _math_plugin])
     tokens, state = md.parse(markdown)
     renderer.load_footnotes(tokens, state)
     body = renderer.render_tokens(tokens, state)
