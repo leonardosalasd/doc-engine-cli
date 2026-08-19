@@ -102,10 +102,11 @@ class Conversion:
 class TypstRenderer(mistune.BaseRenderer):
     NAME = "typst"
 
-    def __init__(self, base_dir: Path | None = None) -> None:
+    def __init__(self, base_dir: Path | None = None, namespace: str = "") -> None:
         super().__init__()
         self._ordered_stack: list[bool] = []
         self._base_dir = base_dir
+        self._namespace = namespace
         self._footnotes: dict[str, str] = {}
         self._asset_names: dict[str, str] = {}
         self.assets: dict[str, str] = {}
@@ -188,7 +189,7 @@ class TypstRenderer(mistune.BaseRenderer):
 
     def _render_diagram(self, language: str, source: str) -> str:
         svg = diagrams.render(language, source)
-        name = f"assets/diagram_{len(self.generated)}.svg"
+        name = f"assets/{self._namespace}diagram_{len(self.generated)}.svg"
         self.generated[name] = svg
         return f'\n#align(center)[#fit-image("{name}")]\n\n'
 
@@ -251,8 +252,8 @@ class TypstRenderer(mistune.BaseRenderer):
         if not head:
             return ""
 
-        head_row = head.get("children", [{}])[0]
-        cells = head_row.get("children", [])
+        # A table_head holds its cells directly, without a table_row in between.
+        cells = head.get("children", [])
         n = len(cells)
         if n == 0:
             return ""
@@ -305,7 +306,7 @@ class TypstRenderer(mistune.BaseRenderer):
         resolved = str(source.resolve())
         if resolved in self._asset_names:
             return self._asset_names[resolved]
-        name = f"assets/{len(self.assets)}_{_UNSAFE.sub('_', source.name)}"
+        name = f"assets/{self._namespace}{len(self.assets)}_{_UNSAFE.sub('_', source.name)}"
         self._asset_names[resolved] = name
         self.assets[name] = resolved
         return name
@@ -314,8 +315,15 @@ class TypstRenderer(mistune.BaseRenderer):
         return data
 
 
-def convert_document(markdown: str, base_dir: Path | None = None) -> Conversion:
-    renderer = TypstRenderer(base_dir=base_dir)
+def convert_document(
+    markdown: str, base_dir: Path | None = None, namespace: str = ""
+) -> Conversion:
+    """Convert Markdown to Typst.
+
+    *namespace* prefixes the names of assets and rendered diagrams, so several
+    documents assembled into one PDF cannot overwrite each other's files.
+    """
+    renderer = TypstRenderer(base_dir=base_dir, namespace=namespace)
     md = mistune.create_markdown(renderer=None, plugins=[*_PLUGINS, _math_plugin])
     tokens, state = md.parse(markdown)
     renderer.load_footnotes(tokens, state)

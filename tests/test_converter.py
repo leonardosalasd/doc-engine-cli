@@ -158,3 +158,20 @@ class TestImages:
         conversion = convert_document("![alt](nope.png)", base_dir=tmp_path)
         assert conversion.assets == {}
         assert "[alt]" in conversion.body
+
+
+class TestTables:
+    def test_all_header_columns_are_kept(self) -> None:
+        result = convert("| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |\n")
+        assert "columns: (1fr, 1fr, 1fr)" in result
+        for header in ("[*A*]", "[*B*]", "[*C*]"):
+            assert header in result
+
+    def test_body_cells_follow_the_header(self) -> None:
+        result = convert("| A | B |\n|---|---|\n| 1 | 2 |\n")
+        assert "columns: (1fr, 1fr)" in result
+        assert "[1]" in result and "[2]" in result
+
+    def test_single_column_table(self) -> None:
+        result = convert("| Only |\n|---|\n| one |\n")
+        assert "columns: (1fr)" in result

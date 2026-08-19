@@ -10,7 +10,7 @@ from rich.console import Console, Group
 from rich.panel import Panel
 from rich.table import Table
 
-from doc_engine import __version__, frontmatter
+from doc_engine import __version__, frontmatter, manifest
 from doc_engine.compiler import (
     DEFAULT_PAPER,
     DEFAULT_TEMPLATE,
@@ -223,11 +223,12 @@ def build(
     if input_file:
         input_path = Path(input_file)
     else:
-        input_path = _find_file(cwd, _README_CANDIDATES)
+        input_path = manifest.find(cwd) or _find_file(cwd, _README_CANDIDATES)
         if not input_path:
             console.print(
-                "[bold red]Error:[/bold red] No README.md found in current directory.\n"
-                "[dim]Provide an input file or run from a directory containing a README.md.[/dim]"
+                "[bold red]Error:[/bold red] Nothing to build in this directory.\n"
+                "[dim]Add a README.md, write a doc-engine.md manifest, "
+                "or name a file to convert.[/dim]"
             )
             raise SystemExit(1)
         console.print(f"  [dim]Auto-detected:[/dim] [cyan]{input_path.name}[/cyan]")
@@ -251,16 +252,28 @@ def build(
         output_path = _unique_path(output_path)
 
     def run() -> bool:
-        raw = input_path.read_text(encoding="utf-8")
-        meta, content = frontmatter.parse(raw)
-
-        issues = lint(raw)
-        if issues:
-            _print_issues(issues, str(input_path))
-            console.print()
-            if has_errors(issues):
-                console.print("[bold red]Aborted:[/bold red] fix the errors above, or run [cyan]--dry-run[/cyan] to recheck.")
+        collected: manifest.Manifest | None = None
+        if manifest.is_manifest(input_path):
+            try:
+                collected = manifest.load(input_path)
+            except manifest.ManifestError as exc:
+                console.print(f"[bold red]Error:[/bold red] {exc}")
                 return False
+            meta = collected.metadata
+            content = ""
+            to_lint = [entry.path for entry in collected.entries if entry.kind == "markdown"]
+        else:
+            meta, content = frontmatter.parse(input_path.read_text(encoding="utf-8"))
+            to_lint = [input_path]
+
+        for source in to_lint:
+            issues = lint(source.read_text(encoding="utf-8"))
+            if issues:
+                _print_issues(issues, str(source))
+                console.print()
+                if has_errors(issues):
+                    console.print("[bold red]Aborted:[/bold red] fix the errors above, or run [cyan]--dry-run[/cyan] to recheck.")
+                    return False
 
         resolved_template = template or _resolve_template(meta.get("template", DEFAULT_TEMPLATE))
         if resolved_template is None:
@@ -274,7 +287,9 @@ def build(
                 console.print(f"[bold yellow]Warning:[/bold yellow] Ignoring unknown accent — {meta['accent']}")
 
         resolved_bib = _resolve_bib(bib or meta.get("bib"), cwd)
-        resolved_title = title or meta.get("title") or extract_title(content)
+        if resolved_bib is None and collected is not None:
+            resolved_bib = collected.bibliography
+        resolved_title = title or meta.get("title") or extract_title(content) or input_path.stem
         resolved_author = author or meta.get("author") or _detect_git_user()
         resolved_subtitle = subtitle or meta.get("subtitle") or ""
         resolved_date = date or meta.get("date")
@@ -294,7 +309,12 @@ def build(
 
         with console.status("[bold blue]Converting Markdown → Typst…[/bold blue]"):
             try:
-                conversion = convert_document(strip_first_heading(content), base_dir=input_path.parent)
+                if collected is not None:
+                    conversion = manifest.assemble(collected)
+                else:
+                    conversion = convert_document(
+                        strip_first_heading(content), base_dir=input_path.parent
+                    )
             except DiagramError as exc:
                 console.print(
                     f"\n[bold red]Diagram failed:[/bold red] {exc.language} block — {exc.message}"
@@ -354,18 +374,38 @@ def _resolve_bib(bib: str | None, cwd: Path) -> Path | None:
 
 
 def _watch(input_path: Path, run) -> None:
-    console.print("\n[dim]Watching for changes — press Ctrl+C to stop.[/dim]")
-    last = _mtime(input_path)
+    watched = _watch_list(input_path)
+    count = len(watched)
+    noun = "file" if count == 1 else "files"
+    console.print(f"\n[dim]Watching {count} {noun} — press Ctrl+C to stop.[/dim]")
+    last = _fingerprint(watched)
     try:
         while True:
             time.sleep(0.5)
-            current = _mtime(input_path)
+            current = _fingerprint(watched)
             if current != last:
                 last = current
                 console.rule(f"[dim]{time.strftime('%H:%M:%S')} — rebuilding[/dim]")
                 run()
+                # A rebuild can change which files the manifest pulls in.
+                watched = _watch_list(input_path)
+                last = _fingerprint(watched)
     except KeyboardInterrupt:
         console.print("\n[dim]Stopped.[/dim]")
+
+
+def _watch_list(input_path: Path) -> list[Path]:
+    """The manifest and everything it pulls in, so editing any part rebuilds."""
+    if not manifest.is_manifest(input_path):
+        return [input_path]
+    try:
+        return [input_path, *manifest.load(input_path).sources]
+    except (manifest.ManifestError, OSError):
+        return [input_path]
+
+
+def _fingerprint(paths: list[Path]) -> tuple[float, ...]:
+    return tuple(_mtime(path) for path in paths)
 
 
 def _mtime(path: Path) -> float:
