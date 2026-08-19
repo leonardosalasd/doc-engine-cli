@@ -6,6 +6,19 @@ import typst
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 DEFAULT_TEMPLATE = "academic"
+DEFAULT_PAPER = "a4"
+
+PAPER_SIZES = (
+    "a3",
+    "a4",
+    "a5",
+    "a6",
+    "iso-b5",
+    "jis-b5",
+    "us-legal",
+    "us-letter",
+    "us-tabloid",
+)
 
 
 def available_templates() -> list[str]:
@@ -39,6 +52,7 @@ def compile_pdf(
     date: str | None = None,
     assets: dict[str, str] | None = None,
     generated: dict[str, str] | None = None,
+    paper: str = DEFAULT_PAPER,
 ) -> None:
     source = template_path(template)
     if not source.exists():
@@ -73,7 +87,7 @@ def compile_pdf(
         main_file.write_text(
             _build_main(
                 typst_body, title, author, bib_inject, accent_inject,
-                branding, version, subtitle, date,
+                branding, version, subtitle, date, paper,
             ),
             encoding="utf-8",
         )
@@ -102,6 +116,7 @@ def _build_main(
     version: str,
     subtitle: str = "",
     date: str | None = None,
+    paper: str = DEFAULT_PAPER,
 ) -> str:
     date_line = f'  date: "{_escape(date)}",\n' if date else ""
     return (
@@ -116,6 +131,7 @@ def _build_main(
         f"  accent: {accent_inject},\n"
         f"  branding: {'true' if branding else 'false'},\n"
         f'  version: "{version}",\n'
+        f'  paper: "{paper}",\n'
         ")\n\n"
         f"{body}"
     )

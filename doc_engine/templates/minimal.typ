@@ -7,6 +7,8 @@
   accent: none,
   branding: true,
   version: "",
+  paper: "a4",
+  ..options,
   body,
 ) = {
   let accent-color = if accent == none { rgb("#111827") } else { accent }
@@ -17,7 +19,7 @@
   set document(author: author, title: title)
 
   set page(
-    paper: "us-letter",
+    paper: paper,
     margin: (top: 1in, bottom: 1in, left: 1in, right: 1in),
     footer: context {
       set text(font: "Inter", size: 8pt, fill: muted)

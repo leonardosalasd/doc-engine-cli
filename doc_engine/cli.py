@@ -10,7 +10,13 @@ from rich.console import Console
 from rich.panel import Panel
 
 from doc_engine import __version__, frontmatter
-from doc_engine.compiler import DEFAULT_TEMPLATE, available_templates, compile_pdf
+from doc_engine.compiler import (
+    DEFAULT_PAPER,
+    DEFAULT_TEMPLATE,
+    PAPER_SIZES,
+    available_templates,
+    compile_pdf,
+)
 from doc_engine.converter import convert_document, extract_title, strip_first_heading
 from doc_engine.diagrams import DiagramError
 from doc_engine.linter import has_errors, lint
@@ -114,6 +120,16 @@ def _template_callback(ctx: click.Context, param: click.Parameter, value: str | 
     return resolved
 
 
+def _resolve_paper(flag: str | None, from_meta: str | None) -> str | None:
+    """Return the page size to use, or None when the front matter names an unknown one."""
+    if flag:
+        return flag.lower()
+    if from_meta:
+        key = from_meta.strip().lower()
+        return key if key in PAPER_SIZES else None
+    return DEFAULT_PAPER
+
+
 def _template_label(template: str) -> str:
     return Path(template).stem if template.endswith(".typ") else template
 
@@ -162,6 +178,12 @@ def cli(ctx: click.Context) -> None:
     callback=_normalize_accent,
     help="Accent color as a hex value (#2563eb) or a name (blue, teal, rose...).",
 )
+@click.option(
+    "--paper",
+    default=None,
+    type=click.Choice(PAPER_SIZES, case_sensitive=False),
+    help=f"Page size (default: {DEFAULT_PAPER}).",
+)
 @click.option("--bib", default=None, help="Path to a custom .bib file.")
 @click.option("--no-branding", "no_branding", is_flag=True, help="Hide the doc-engine attribution in the PDF.")
 @click.option("--dry-run", "dry_run", is_flag=True, help="Check the Markdown for errors without producing a PDF.")
@@ -177,6 +199,7 @@ def build(
     date: str | None,
     template: str | None,
     accent: str | None,
+    paper: str | None,
     bib: str | None,
     no_branding: bool,
     dry_run: bool,
@@ -253,10 +276,17 @@ def build(
         resolved_author = author or meta.get("author") or _detect_git_user()
         resolved_subtitle = subtitle or meta.get("subtitle") or ""
         resolved_date = date or meta.get("date")
+        resolved_paper = _resolve_paper(paper, meta.get("paper"))
+        if resolved_paper is None:
+            console.print(f"[bold red]Error:[/bold red] Unknown paper size — {meta.get('paper')}")
+            return False
 
         console.print(f"  [dim]Title:[/dim]    [white]{resolved_title}[/white]")
         console.print(f"  [dim]Author:[/dim]   [white]{resolved_author}[/white]")
-        console.print(f"  [dim]Template:[/dim] [white]{_template_label(resolved_template)}[/white]")
+        console.print(
+            f"  [dim]Template:[/dim] [white]{_template_label(resolved_template)}[/white]"
+            f" [dim]on[/dim] [white]{resolved_paper}[/white]"
+        )
         console.print(f"  [dim]Output:[/dim]   [cyan]{output_path}[/cyan]")
         console.print()
 
@@ -285,6 +315,7 @@ def build(
                     version=__version__,
                     assets=conversion.assets,
                     generated=conversion.generated,
+                    paper=resolved_paper,
                 )
             except Exception as exc:
                 message = getattr(exc, "message", None) or str(exc)
