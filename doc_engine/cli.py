@@ -6,8 +6,9 @@ import time
 from pathlib import Path
 
 import click
-from rich.console import Console
+from rich.console import Console, Group
 from rich.panel import Panel
+from rich.table import Table
 
 from doc_engine import __version__, frontmatter
 from doc_engine.compiler import (
@@ -19,6 +20,7 @@ from doc_engine.compiler import (
 )
 from doc_engine.converter import convert_document, extract_title, strip_first_heading
 from doc_engine.diagrams import DiagramError
+from doc_engine.help import RichCommand, RichGroup
 from doc_engine.linter import has_errors, lint
 
 if sys.platform == "win32":
@@ -151,15 +153,15 @@ def _print_issues(issues: list, filename: str) -> None:
         console.print(f"  [{color}]{issue.format(filename)}[/{color}]")
 
 
-@click.group(invoke_without_command=True)
+@click.group(cls=RichGroup, invoke_without_command=True)
 @click.version_option(__version__, prog_name="doc-engine")
 @click.pass_context
 def cli(ctx: click.Context) -> None:
     if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
+        ctx.get_help()
 
 
-@cli.command()
+@cli.command(cls=RichCommand)
 @click.argument("input_file", required=False, type=click.Path(exists=False))
 @click.option("-o", "--output", default=None, help="Output PDF file path.")
 @click.option("-t", "--title", default=None, help="Document title override.")
@@ -373,20 +375,29 @@ def _mtime(path: Path) -> float:
         return 0.0
 
 
-@cli.command()
+@cli.command(cls=RichCommand)
 def info() -> None:
-    """Show version, repository, and available templates."""
-    templates = ", ".join(available_templates())
-    body = (
-        f"[bold white]doc-engine-cli[/bold white] [dim]v{__version__}[/dim]\n"
-        "Zero-config Markdown → PDF documentation engine.\n\n"
-        f"[dim]Repository:[/dim] [cyan]{REPO_URL}[/cyan]\n"
-        f"[dim]Templates:[/dim]  {templates}\n\n"
-        "[dim]Common usage[/dim]\n"
-        "  doc-engine build\n"
-        "  doc-engine build README.md --template modern --accent teal\n"
-        "  doc-engine build --watch\n\n"
-        "[dim]Run[/dim] [cyan]doc-engine --help[/cyan] [dim]for every command and flag.[/dim]"
+    """Show version, repository, and what this build supports."""
+    facts = Table.grid(padding=(0, 2))
+    facts.add_column(style="dim", no_wrap=True, vertical="top")
+    facts.add_column()
+    facts.add_row("Repository", f"[cyan]{REPO_URL}[/cyan]")
+    facts.add_row("Templates", ", ".join(available_templates()))
+    facts.add_row("Page sizes", f"{', '.join(PAPER_SIZES)} [dim](default {DEFAULT_PAPER})[/dim]")
+    facts.add_row("Accents", f"{', '.join(sorted(_NAMED_ACCENTS))} [dim]or any hex[/dim]")
+
+    body = Group(
+        f"[bold white]doc-engine-cli[/bold white] [dim]v{__version__}[/dim]",
+        "Turn Markdown into a polished PDF. No LaTeX, no config.",
+        "",
+        facts,
+        "",
+        "[dim]Markdown support[/dim]",
+        "  tables · task lists · footnotes · local images · bibliography",
+        "  mermaid and svg code blocks rendered as diagrams",
+        "  LaTeX math, inline with $…$ and display with $$…$$",
+        "",
+        "[dim]Run[/dim] [cyan]doc-engine --help[/cyan] [dim]for every command and flag.[/dim]",
     )
     console.print(Panel(body, border_style="blue", padding=(1, 2), title="info"))
 

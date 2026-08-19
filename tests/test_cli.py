@@ -120,3 +120,37 @@ class TestAccentValidation:
         good.write_text("# T\n\nText.\n")
         result = CliRunner().invoke(cli, ["build", str(good), "--template", "nope", "--dry-run"])
         assert result.exit_code == 2
+
+
+class TestHelp:
+    def test_top_level_help_lists_build_options(self) -> None:
+        result = CliRunner().invoke(cli, ["--help"])
+        assert result.exit_code == 0
+        for expected in ("--template", "--accent", "--paper", "--watch"):
+            assert expected in result.output
+
+    def test_top_level_help_groups_options(self) -> None:
+        result = CliRunner().invoke(cli, ["--help"])
+        for heading in ("Input and output", "Document details", "Appearance"):
+            assert heading in result.output
+
+    def test_top_level_help_shows_examples_and_commands(self) -> None:
+        result = CliRunner().invoke(cli, ["--help"])
+        assert "Examples" in result.output
+        assert "doc-engine info" in result.output
+
+    def test_build_help_still_works(self) -> None:
+        result = CliRunner().invoke(cli, ["build", "--help"])
+        assert result.exit_code == 0
+        assert "--output" in result.output
+
+    def test_bare_invocation_shows_help(self) -> None:
+        result = CliRunner().invoke(cli, [])
+        assert result.exit_code == 0
+        assert "Usage" in result.output
+
+    def test_info_lists_capabilities(self) -> None:
+        result = CliRunner().invoke(cli, ["info"])
+        flat = " ".join(result.output.split())
+        assert "mermaid" in flat
+        assert "math" in flat.lower()
