@@ -8,6 +8,11 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 DEFAULT_TEMPLATE = "academic"
 DEFAULT_PAPER = "a4"
 
+# Archival profiles typst-py accepts. a-2b is the usual choice for documents
+# that have to be readable decades from now; a-3b additionally allows embedded
+# attachments.
+PDF_STANDARDS = ("a-2b", "a-3b")
+
 PAPER_SIZES = (
     "a3",
     "a4",
@@ -53,6 +58,7 @@ def compile_pdf(
     assets: dict[str, str] | None = None,
     generated: dict[str, str] | None = None,
     paper: str = DEFAULT_PAPER,
+    pdf_standard: str | None = None,
 ) -> None:
     source = template_path(template)
     if not source.exists():
@@ -86,13 +92,24 @@ def compile_pdf(
         main_file = tmp / "main.typ"
         main_file.write_text(
             _build_main(
-                typst_body, title, author, bib_inject, accent_inject,
-                branding, version, subtitle, date, paper,
+                typst_body,
+                title,
+                author,
+                bib_inject,
+                accent_inject,
+                branding,
+                version,
+                subtitle,
+                date,
+                paper,
             ),
             encoding="utf-8",
         )
 
-        typst.compile(str(main_file), output=resolved_output)
+        if pdf_standard:
+            typst.compile(str(main_file), output=resolved_output, pdf_standards=[pdf_standard])
+        else:
+            typst.compile(str(main_file), output=resolved_output)
 
 
 # Pictures keep their natural size unless they are too wide for the text block,

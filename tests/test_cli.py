@@ -28,7 +28,9 @@ class TestTemplates:
         assert 'version: "1.0.0"' in main
 
     def test_build_main_injects_subtitle_and_date(self) -> None:
-        main = _build_main("body", "T", "Me", "none", "none", True, "1.0.0", "A subtitle", "2026-07-28")
+        main = _build_main(
+            "body", "T", "Me", "none", "none", True, "1.0.0", "A subtitle", "2026-07-28"
+        )
         assert 'subtitle: "A subtitle"' in main
         assert 'date: "2026-07-28"' in main
 
@@ -38,7 +40,9 @@ class TestTemplates:
     def test_custom_template_path_is_rejected_when_missing(self, tmp_path) -> None:
         doc = tmp_path / "doc.md"
         doc.write_text("# T\n\nText.\n")
-        result = CliRunner().invoke(cli, ["build", str(doc), "--template", "missing.typ", "--dry-run"])
+        result = CliRunner().invoke(
+            cli, ["build", str(doc), "--template", "missing.typ", "--dry-run"]
+        )
         assert result.exit_code == 2
 
 

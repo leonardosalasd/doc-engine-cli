@@ -55,9 +55,7 @@ class TestLoading:
 
     def test_remote_links_are_ignored(self, tmp_path) -> None:
         (tmp_path / "a.md").write_text("# A\n")
-        (tmp_path / "doc-engine.md").write_text(
-            "- [Site](https://example.com)\n- [Local](a.md)\n"
-        )
+        (tmp_path / "doc-engine.md").write_text("- [Site](https://example.com)\n- [Local](a.md)\n")
         loaded = manifest.load(tmp_path / "doc-engine.md")
         assert len(loaded.entries) == 1
 
@@ -99,8 +97,6 @@ class TestAssembly:
             folder.mkdir()
             (folder / "logo.png").write_bytes(b"\x89PNG\r\n")
             (folder / "page.md").write_text(f"# {name}\n\n![logo](logo.png)\n")
-        (tmp_path / "doc-engine.md").write_text(
-            "- [One](one/page.md)\n- [Two](two/page.md)\n"
-        )
+        (tmp_path / "doc-engine.md").write_text("- [One](one/page.md)\n- [Two](two/page.md)\n")
         conversion = manifest.assemble(manifest.load(tmp_path / "doc-engine.md"))
         assert len(conversion.assets) == 2

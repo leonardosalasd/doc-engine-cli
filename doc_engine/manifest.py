@@ -114,7 +114,7 @@ def load(path: Path) -> Manifest:
     return Manifest(metadata=metadata, entries=entries, bibliography=bibliography)
 
 
-def assemble(manifest: Manifest) -> Conversion:
+def assemble(manifest: Manifest, download_dir: Path | None = None) -> Conversion:
     """Convert every entry and join the results into one document.
 
     Each entry is converted against its own folder, so a picture referenced from
@@ -124,6 +124,7 @@ def assemble(manifest: Manifest) -> Conversion:
     body: list[str] = []
     assets: dict[str, str] = {}
     generated: dict[str, str] = {}
+    warnings: list[str] = []
 
     for position, entry in enumerate(manifest.entries):
         namespace = f"e{position}_"
@@ -132,10 +133,12 @@ def assemble(manifest: Manifest) -> Conversion:
                 entry.path.read_text(encoding="utf-8"),
                 base_dir=entry.path.parent,
                 namespace=namespace,
+                download_dir=download_dir,
             )
             body.append(piece.body)
             assets.update(piece.assets)
             generated.update(piece.generated)
+            warnings.extend(piece.warnings)
         elif entry.kind == "diagram":
             name = f"assets/{namespace}{entry.path.stem}.svg"
             generated[name] = diagrams.render(
@@ -147,7 +150,7 @@ def assemble(manifest: Manifest) -> Conversion:
             assets[name] = str(entry.path.resolve())
             body.append(_figure(name, entry.label))
 
-    return Conversion(body="\n\n".join(body), assets=assets, generated=generated)
+    return Conversion(body="\n\n".join(body), assets=assets, generated=generated, warnings=warnings)
 
 
 def _figure(name: str, label: str) -> str:

@@ -1,7 +1,9 @@
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -10,11 +12,12 @@ from rich.console import Console, Group
 from rich.panel import Panel
 from rich.table import Table
 
-from doc_engine import __version__, frontmatter, manifest
+from doc_engine import __version__, config, frontmatter, manifest
 from doc_engine.compiler import (
     DEFAULT_PAPER,
     DEFAULT_TEMPLATE,
     PAPER_SIZES,
+    PDF_STANDARDS,
     available_templates,
     compile_pdf,
 )
@@ -187,10 +190,42 @@ def cli(ctx: click.Context) -> None:
     help=f"Page size (default: {DEFAULT_PAPER}).",
 )
 @click.option("--bib", default=None, help="Path to a custom .bib file.")
-@click.option("--no-branding", "no_branding", is_flag=True, help="Hide the doc-engine attribution in the PDF.")
-@click.option("--dry-run", "dry_run", is_flag=True, help="Check the Markdown for errors without producing a PDF.")
-@click.option("-w", "--watch", "watch", is_flag=True, help="Rebuild automatically whenever the source changes.")
-@click.option("-f", "--force", "force", is_flag=True, help="Overwrite the output file instead of writing a new one.")
+@click.option(
+    "--no-branding", "no_branding", is_flag=True, help="Hide the doc-engine attribution in the PDF."
+)
+@click.option(
+    "--dry-run",
+    "dry_run",
+    is_flag=True,
+    help="Check the Markdown for errors without producing a PDF.",
+)
+@click.option(
+    "--pdf-standard",
+    "pdf_standard",
+    default=None,
+    type=click.Choice(PDF_STANDARDS, case_sensitive=False),
+    help="Write an archival PDF/A file.",
+)
+@click.option(
+    "--fetch-images",
+    "fetch_images",
+    is_flag=True,
+    help="Download images that are linked by URL instead of skipping them.",
+)
+@click.option(
+    "-w",
+    "--watch",
+    "watch",
+    is_flag=True,
+    help="Rebuild automatically whenever the source changes.",
+)
+@click.option(
+    "-f",
+    "--force",
+    "force",
+    is_flag=True,
+    help="Overwrite the output file instead of writing a new one.",
+)
 @click.option("--open", "open_pdf", is_flag=True, help="Open the PDF after generation.")
 def build(
     input_file: str | None,
@@ -204,6 +239,8 @@ def build(
     paper: str | None,
     bib: str | None,
     no_branding: bool,
+    pdf_standard: str | None,
+    fetch_images: bool,
     dry_run: bool,
     watch: bool,
     force: bool,
@@ -219,6 +256,14 @@ def build(
     )
 
     cwd = Path.cwd()
+
+    try:
+        settings = config.load(cwd)
+    except config.ConfigError as exc:
+        console.print(f"[bold red]Error:[/bold red] {exc}")
+        raise SystemExit(1) from exc
+    if settings:
+        console.print(f"  [dim]Settings:[/dim] [cyan]{config.CONFIG_NAME}[/cyan]")
 
     if input_file:
         input_path = Path(input_file)
@@ -272,31 +317,45 @@ def build(
                 _print_issues(issues, str(source))
                 console.print()
                 if has_errors(issues):
-                    console.print("[bold red]Aborted:[/bold red] fix the errors above, or run [cyan]--dry-run[/cyan] to recheck.")
+                    console.print(
+                        "[bold red]Aborted:[/bold red] fix the errors above, or run [cyan]--dry-run[/cyan] to recheck."
+                    )
                     return False
 
-        resolved_template = template or _resolve_template(meta.get("template", DEFAULT_TEMPLATE))
+        def setting(name: str) -> str | None:
+            """Front matter first, then the project file."""
+            return meta.get(name) or settings.get(name)
+
+        wanted_template = setting("template") or DEFAULT_TEMPLATE
+        resolved_template = template or _resolve_template(wanted_template)
         if resolved_template is None:
-            console.print(f"[bold red]Error:[/bold red] Unknown template in front matter — {meta.get('template')}")
+            console.print(f"[bold red]Error:[/bold red] Unknown template — {wanted_template}")
             return False
 
         resolved_accent = accent
-        if resolved_accent is None and meta.get("accent"):
-            resolved_accent = _accent_hex(meta["accent"])
+        if resolved_accent is None and setting("accent"):
+            wanted_accent = setting("accent")
+            resolved_accent = _accent_hex(wanted_accent)
             if resolved_accent is None:
-                console.print(f"[bold yellow]Warning:[/bold yellow] Ignoring unknown accent — {meta['accent']}")
+                console.print(
+                    f"[bold yellow]Warning:[/bold yellow] Ignoring unknown accent — {wanted_accent}"
+                )
 
-        resolved_bib = _resolve_bib(bib or meta.get("bib"), cwd)
+        resolved_bib = _resolve_bib(bib or setting("bib"), cwd)
         if resolved_bib is None and collected is not None:
             resolved_bib = collected.bibliography
         resolved_title = title or meta.get("title") or extract_title(content) or input_path.stem
-        resolved_author = author or meta.get("author") or _detect_git_user()
+        resolved_author = author or setting("author") or _detect_git_user()
         resolved_subtitle = subtitle or meta.get("subtitle") or ""
         resolved_date = date or meta.get("date")
-        resolved_paper = _resolve_paper(paper, meta.get("paper"))
+        resolved_paper = _resolve_paper(paper, setting("paper"))
         if resolved_paper is None:
-            console.print(f"[bold red]Error:[/bold red] Unknown paper size — {meta.get('paper')}")
+            console.print(f"[bold red]Error:[/bold red] Unknown paper size — {setting('paper')}")
             return False
+
+        resolved_standard = pdf_standard or setting("pdf_standard")
+        resolved_branding = not no_branding and setting("branding") != "false"
+        wants_downloads = fetch_images or setting("fetch_images") == "true"
 
         console.print(f"  [dim]Title:[/dim]    [white]{resolved_title}[/white]")
         console.print(f"  [dim]Author:[/dim]   [white]{resolved_author}[/white]")
@@ -307,13 +366,17 @@ def build(
         console.print(f"  [dim]Output:[/dim]   [cyan]{output_path}[/cyan]")
         console.print()
 
+        downloads = Path(tempfile.mkdtemp(prefix="doc-engine-")) if wants_downloads else None
+
         with console.status("[bold blue]Converting Markdown → Typst…[/bold blue]"):
             try:
                 if collected is not None:
-                    conversion = manifest.assemble(collected)
+                    conversion = manifest.assemble(collected, download_dir=downloads)
                 else:
                     conversion = convert_document(
-                        strip_first_heading(content), base_dir=input_path.parent
+                        strip_first_heading(content),
+                        base_dir=input_path.parent,
+                        download_dir=downloads,
                     )
             except DiagramError as exc:
                 console.print(
@@ -333,11 +396,12 @@ def build(
                     bib_file=str(resolved_bib.resolve()) if resolved_bib else None,
                     template=resolved_template,
                     accent=resolved_accent,
-                    branding=not no_branding,
+                    branding=resolved_branding,
                     version=__version__,
                     assets=conversion.assets,
                     generated=conversion.generated,
                     paper=resolved_paper,
+                    pdf_standard=resolved_standard,
                 )
             except Exception as exc:
                 message = getattr(exc, "message", None) or str(exc)
@@ -345,8 +409,16 @@ def build(
                 for hint in getattr(exc, "hints", []) or []:
                     console.print(f"  [dim]hint: {hint}[/dim]")
                 return False
+            finally:
+                if downloads is not None:
+                    shutil.rmtree(downloads, ignore_errors=True)
 
-        console.print(f"[bold green]✓[/bold green] Generated → [bold cyan]{output_path}[/bold cyan]")
+        for warning in conversion.warnings:
+            console.print(f"[bold yellow]Warning:[/bold yellow] {warning}")
+
+        console.print(
+            f"[bold green]✓[/bold green] Generated → [bold cyan]{output_path}[/bold cyan]"
+        )
         return True
 
     ok = run()

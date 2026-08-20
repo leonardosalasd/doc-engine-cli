@@ -163,13 +163,12 @@ _LETTERS = re.compile(r"[A-Za-z]+")
 # Typst reads a run of letters as one identifier and fails when it does not know
 # it, while LaTeX reads `xy` as x times y. Runs are therefore split into single
 # letters unless they name one of these operators, which Typst does define.
-_OPERATORS = frozenset(
-    """
-    arccos arcsin arctan arg ceil cos cosh cot coth csc deg det dif dim exp floor
-    gcd hom id im inf ker lcm lim liminf limsup ln log max min mod Pr round sec
-    sin sinh sup tan tanh tr upright
-    """.split()
-)
+_OPERATOR_NAMES = """
+arccos arcsin arctan arg ceil cos cosh cot coth csc deg det dif dim exp floor
+gcd hom id im inf ker lcm lim liminf limsup ln log max min mod Pr round sec
+sin sinh sup tan tanh tr upright
+"""
+_OPERATORS = frozenset(_OPERATOR_NAMES.split())  # noqa: SIM905 - a word list reads better here
 
 
 def to_typst(latex: str) -> str:

@@ -17,7 +17,7 @@ from typing import Any
 
 import mistune
 
-from doc_engine import diagrams, latex
+from doc_engine import diagrams, latex, remote
 
 _TYPST_ESCAPES = {
     "\\": "\\\\",
@@ -50,12 +50,12 @@ _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 _CITATION = re.compile(r"\\\[\\@([a-zA-Z0-9_\-]+)\\\]")
 
 _UNCHECKED = (
-    '#box(width: 0.85em, height: 0.85em, radius: 2pt, '
+    "#box(width: 0.85em, height: 0.85em, radius: 2pt, "
     'stroke: 1pt + rgb("#94a3b8"), baseline: 0.15em)'
 )
 _CHECKED = (
     '#box(width: 0.85em, height: 0.85em, radius: 2pt, fill: rgb("#16a34a"), '
-    'baseline: 0.15em)[#align(center + horizon)[#text(fill: white, size: 0.62em, weight: 700)[✓]]]'
+    "baseline: 0.15em)[#align(center + horizon)[#text(fill: white, size: 0.62em, weight: 700)[✓]]]"
 )
 
 
@@ -97,16 +97,24 @@ class Conversion:
     body: str
     assets: dict[str, str] = field(default_factory=dict)
     generated: dict[str, str] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
 
 
 class TypstRenderer(mistune.BaseRenderer):
     NAME = "typst"
 
-    def __init__(self, base_dir: Path | None = None, namespace: str = "") -> None:
+    def __init__(
+        self,
+        base_dir: Path | None = None,
+        namespace: str = "",
+        download_dir: Path | None = None,
+    ) -> None:
         super().__init__()
         self._ordered_stack: list[bool] = []
         self._base_dir = base_dir
         self._namespace = namespace
+        self._download_dir = download_dir
+        self.warnings: list[str] = []
         self._footnotes: dict[str, str] = {}
         self._asset_names: dict[str, str] = {}
         self.assets: dict[str, str] = {}
@@ -197,7 +205,7 @@ class TypstRenderer(mistune.BaseRenderer):
         content = _render_children(self, token, state).strip()
         return (
             "#block(\n"
-            '  inset: (left: 1.2em, y: 0.6em),\n'
+            "  inset: (left: 1.2em, y: 0.6em),\n"
             '  stroke: (left: 2.5pt + rgb("#4a90d9")),\n'
             '  fill: rgb("#f0f4f8"),\n'
             "  radius: 2pt,\n"
@@ -298,7 +306,11 @@ class TypstRenderer(mistune.BaseRenderer):
                 self._footnotes[str(key)] = " ".join(rendered.split())
 
     def _register_image(self, url: str) -> str | None:
-        if not url or self._base_dir is None or _REMOTE.match(url) or url.startswith("data:"):
+        if not url or url.startswith("data:"):
+            return None
+        if _REMOTE.match(url):
+            return self._download(url)
+        if self._base_dir is None:
             return None
         source = (self._base_dir / url).expanduser()
         if not source.is_file():
@@ -311,25 +323,50 @@ class TypstRenderer(mistune.BaseRenderer):
         self.assets[name] = resolved
         return name
 
+    def _download(self, url: str) -> str | None:
+        """Fetch a linked image, when the build asked for that."""
+        if self._download_dir is None:
+            return None
+        if url in self._asset_names:
+            return self._asset_names[url]
+        try:
+            downloaded = remote.fetch(url, self._download_dir)
+        except remote.DownloadError as exc:
+            self.warnings.append(f"could not fetch {url} — {exc}")
+            return None
+        name = f"assets/{self._namespace}{len(self.assets)}_{downloaded.name}"
+        self._asset_names[url] = name
+        self.assets[name] = str(downloaded)
+        return name
+
     def finalize(self, data: str, state: Any) -> str:
         return data
 
 
 def convert_document(
-    markdown: str, base_dir: Path | None = None, namespace: str = ""
+    markdown: str,
+    base_dir: Path | None = None,
+    namespace: str = "",
+    download_dir: Path | None = None,
 ) -> Conversion:
     """Convert Markdown to Typst.
 
     *namespace* prefixes the names of assets and rendered diagrams, so several
     documents assembled into one PDF cannot overwrite each other's files.
+    *download_dir* enables fetching linked images, which is otherwise skipped.
     """
-    renderer = TypstRenderer(base_dir=base_dir, namespace=namespace)
+    renderer = TypstRenderer(base_dir=base_dir, namespace=namespace, download_dir=download_dir)
     md = mistune.create_markdown(renderer=None, plugins=[*_PLUGINS, _math_plugin])
     tokens, state = md.parse(markdown)
     renderer.load_footnotes(tokens, state)
     body = renderer.render_tokens(tokens, state)
     body = _CITATION.sub(r"@\1", body)
-    return Conversion(body=body, assets=renderer.assets, generated=renderer.generated)
+    return Conversion(
+        body=body,
+        assets=renderer.assets,
+        generated=renderer.generated,
+        warnings=renderer.warnings,
+    )
 
 
 def convert(markdown: str, base_dir: Path | None = None) -> str:
