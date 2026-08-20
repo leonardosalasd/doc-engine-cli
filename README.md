@@ -14,7 +14,7 @@
 Transform any `README.md` into a premium, print-ready PDF report — no configuration, no templates, no LaTeX.
 
 <br>
-<img src="assets/doc-engine2.gif" alt="doc-engine-cli Generation Demo" width="800"/>
+<img src="assets/doc-engine-v2.gif" alt="doc-engine-cli turning a Markdown file into a PDF" width="820"/>
 <br>
 
 ```
@@ -24,6 +24,30 @@ pipx install doc-engine-cli
 ---
 
 </div>
+
+> [!NOTE]
+> ### v2.0.0 is finished and looking for testers
+>
+> All of v2.0.0 is written and merged here — diagrams, math, multi-file
+> documents, seven layouts, page sizes, and the rest. It is **not on PyPI yet**,
+> because I would rather find the rough edges before publishing than after.
+> `pipx install doc-engine-cli` still gives you the stable **1.1.1**.
+>
+> **Try it and help me break it:**
+>
+> ```bash
+> git clone https://github.com/leonardosalasd/doc-engine-cli.git
+> cd doc-engine-cli
+> pip install -e .
+> doc-engine build
+> ```
+>
+> Everything in this README describes v2.0.0 and works on that checkout. If
+> something misbehaves, an [issue](https://github.com/leonardosalasd/doc-engine-cli/issues/new)
+> or a note in [Discussions](https://github.com/leonardosalasd/doc-engine-cli/discussions)
+> is genuinely useful — that feedback is what decides when this ships.
+>
+> The release follows once it has been through real documents on real machines.
 
 ## Overview
 
