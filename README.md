@@ -44,13 +44,18 @@ That's it. Zero configuration required.
 | Feature | Description |
 |---|---|
 | **Zero-Config** | Auto-detects `README.md`, Git author, and document title. No setup files needed. |
-| **Five Templates** | Academic, modern, minimal, technical, and book layouts, each with a configurable accent color. Point `--template` at your own `.typ` file to go further. |
+| **Seven Templates** | Academic, article, book, minimal, modern, report, and technical layouts, each with a configurable accent color. Point `--template` at your own `.typ` file to go further. |
 | **Front Matter** | An optional `---` metadata block sets the title, subtitle, author, template, and accent right inside the file. |
 | **Watch Mode** | `--watch` rebuilds the PDF every time you save the source. |
+| **Diagrams** | ` ```mermaid ` and ` ```svg ` blocks are rendered as real diagrams, in pure Python — no Node, no headless browser. |
+| **Math** | LaTeX math, inline with `$…$` and display with `$$…$$`, translated into native Typst math. |
+| **Multi-File** | A `doc-engine.md` manifest builds one PDF from many files, diagrams, figures, and a bibliography. |
+| **Page Sizes** | A4 by default, plus A3–A6, ISO/JIS B5, and US letter, legal, and tabloid. |
+| **Project Config** | A `.doc-engine.toml` keeps a team's defaults out of every document. |
 | **Rich Markdown** | Embeds local images, renders GitHub task lists as real checkboxes, and turns `[^1]` footnotes into native Typst footnotes. |
 | **Error Checking** | Reports source problems with line and column before compiling. A `--dry-run` mode runs the check on its own. |
 | **Non-Destructive** | Never overwrites an existing PDF — writes `report (1).pdf`, `report (2).pdf`, … unless you pass `--force`. |
-| **Premium Typography** | Inter font family with fallback chain, justified text, and optimized line spacing. |
+| **Premium Typography** | Font stacks that end in a font Typst ships, so a document looks the same in a bare container as on a laptop. |
 | **Pure Python** | No external binaries required (no Pandoc, no LaTeX). Ships as a single `pip install`. |
 | **Cross-Platform** | Works on Windows, macOS, and Linux with Python 3.10+. |
 
@@ -127,9 +132,13 @@ doc-engine --help               Show all commands and flags
 | `-s, --subtitle` | none | Subtitle shown under the title on the cover. |
 | `-a, --author` | `git config user.name` | Author name override. |
 | `--date` | today | Date shown on the cover. |
-| `--template` | `academic` | A built-in layout (`academic`, `modern`, `minimal`, `technical`, `book`) or a path to your own `.typ` file. |
+| `--template` | `academic` | A built-in layout (`academic`, `article`, `book`, `minimal`, `modern`, `report`, `technical`) or a path to your own `.typ` file. |
 | `--accent` | template default | Accent color as a hex value (`#2563eb`) or a name (`blue`, `teal`, `rose`, ...). |
+| `--paper` | `a4` | Page size: `a3`–`a6`, `iso-b5`, `jis-b5`, `us-letter`, `us-legal`, `us-tabloid`. |
 | `--bib` | auto-detect `refs.bib` | Path to a custom `.bib` file for the bibliography. |
+| `--pdf-standard` | off | Write an archival PDF/A file: `a-2b` or `a-3b`. |
+| `--tall-images` | `fit` | What to do with a picture taller than a page: `fit` scales it onto one page, `split` cuts it across several. |
+| `--fetch-images` | off | Download images linked by URL instead of rendering their alt text. |
 | `--no-branding` | off | Hide the `doc-engine` attribution from the PDF. |
 | `--dry-run` | off | Check the Markdown for errors and exit without writing a PDF. |
 | `-w, --watch` | off | Rebuild automatically whenever the source file changes. |
@@ -209,8 +218,8 @@ accent: teal
 ...
 ```
 
-Supported keys: `title`, `subtitle`, `author`, `date`, `template`, `accent`, and
-`bib`. A flag passed on the command line overrides the matching front-matter key,
+Supported keys: `title`, `subtitle`, `author`, `date`, `template`, `accent`,
+`paper`, and `bib`. A flag passed on the command line overrides the matching front-matter key,
 which in turn overrides the auto-detected value.
 
 ---
@@ -235,9 +244,134 @@ change. Press `Ctrl+C` to stop.
 
 ---
 
+## Diagrams
+
+Fenced blocks tagged `mermaid` or `svg` become pictures instead of code:
+
+````markdown
+```mermaid
+flowchart LR
+    Client --> API --> Ledger
+```
+````
+
+Mermaid is rendered through an embedded JavaScript engine, so there is no Node
+install and no headless browser — it stays a plain `pip install`. A `svg` block
+is passed straight through, since Typst draws SVG natively.
+
+If a diagram has a syntax error, the build stops and reports Mermaid's own
+message rather than producing a broken document.
+
+---
+
+## Math
+
+LaTeX math is translated into native Typst math, inline with `$…$` and as a
+display block with `$$…$$`:
+
+```markdown
+The quadratic formula is $x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}$.
+
+$$
+P(A \mid B) = \frac{P(B \mid A)\,P(A)}{P(B)}
+$$
+```
+
+Greek letters, relations, fractions, roots, sub- and superscripts, font
+commands, matrices, and `cases` are covered. Anything unrecognized passes
+through with its backslash removed, which lands on the right Typst symbol most
+of the time.
+
+A `$` that is not math stays untouched, so prices and shell variables survive:
+`$10`, `$HOME`, and `export $PATH` all render as written.
+
+---
+
+## Multi-File Documents
+
+A project that has outgrown a single file lists its parts in `doc-engine.md`,
+using ordinary Markdown links so the manifest still reads as a table of
+contents on GitHub:
+
+```markdown
+---
+title: Payments Platform
+subtitle: Engineering Handbook
+template: report
+---
+
+- [Overview](doc/overview.md)
+- [Architecture](diagrams/architecture.mmd)
+- [Schema](img/schema.svg)
+- [References](bib/references.bib)
+```
+
+Then just build:
+
+```bash
+doc-engine build
+```
+
+Each entry is handled by what it is:
+
+| Entry | What happens |
+|---|---|
+| `.md` | Appended as a section, headings intact |
+| `.mmd`, `.mermaid` | Rendered as a diagram at that point |
+| `.png`, `.svg`, `.jpg`, … | Placed as a captioned figure |
+| `.bib` | Registered as the bibliography for the document |
+
+Paths resolve against the manifest's folder, and every included file resolves
+its own images relative to itself — so a file builds the same way alone as it
+does inside the manifest. `--watch` follows every file the manifest names.
+
+---
+
+## Project Configuration
+
+Team defaults belong in a `.doc-engine.toml` next to the project, not repeated
+in every document:
+
+```toml
+[doc-engine]
+template = "report"
+accent = "teal"
+paper = "us-letter"
+```
+
+A `[tool.doc-engine]` table in `pyproject.toml` works the same way. Precedence
+runs command-line flag, then front matter, then this file.
+
+---
+
+## Large Images
+
+A picture that does not fit the text block is scaled down until it does, so
+nothing is ever clipped. For a tall diagram — a top-down flowchart, a long
+schema — scaling it onto one page can leave it unreadable, so it can be cut
+across pages at full size instead:
+
+```bash
+doc-engine build --tall-images split
+```
+
+---
+
+## Archival PDFs
+
+For documents that have to stay readable for decades:
+
+```bash
+doc-engine build --pdf-standard a-2b
+```
+
+`a-3b` is also accepted, which additionally allows embedded attachments.
+
+---
+
 ## Templates
 
-`doc-engine` ships with five layouts. Switch with `--template <name>`, and recolor any of them with `--accent`.
+`doc-engine` ships with seven layouts. Switch with `--template <name>`, and recolor any of them with `--accent`.
 
 | Template | Look |
 |---|---|
@@ -246,6 +380,8 @@ change. Press `Ctrl+C` to stop.
 | `minimal` | No cover or table of contents — a compact title block, then straight into the content. |
 | `technical` | Bold layout with a filled accent banner and section markers. Good for engineering docs. |
 | `book` | Classic centered title page with chapter-style section breaks. |
+| `article` | A LaTeX paper: New Computer Modern, numbered sections, title block on page one. |
+| `report` | Roomy and easy on the eyes — 12pt on generous leading, wide margins, lots of air. |
 
 ```bash
 doc-engine build --template book
@@ -390,20 +526,26 @@ doc-engine-cli/
 │   ├── __init__.py          # Package version
 │   ├── __main__.py          # python -m doc_engine entrypoint
 │   ├── cli.py               # Click-based CLI + Git detection
+│   ├── help.py              # Rich help screens
+│   ├── config.py            # .doc-engine.toml project settings
+│   ├── frontmatter.py       # Leading --- metadata block
+│   ├── manifest.py          # doc-engine.md multi-file builds
 │   ├── converter.py         # Markdown → Typst transpiler
+│   ├── latex.py             # LaTeX math → Typst math
+│   ├── diagrams.py          # Mermaid and SVG blocks
+│   ├── images.py            # Cutting pictures taller than a page
+│   ├── remote.py            # Downloading linked images
 │   ├── compiler.py          # Typst → PDF compilation engine
 │   ├── linter.py            # Source checks (line/column reporting)
 │   └── templates/
 │       ├── academic.typ     # Default IEEE-style report
+│       ├── article.typ      # LaTeX paper, numbered sections
+│       ├── report.typ       # Roomy and legible
 │       ├── modern.typ       # Clean sans-serif layout
 │       ├── minimal.typ      # Compact, no cover page
 │       ├── technical.typ    # Accent banner + section markers
 │       └── book.typ         # Centered title page, chapter breaks
-├── tests/
-│   ├── __init__.py
-│   ├── test_converter.py    # Unit tests for the converter
-│   ├── test_linter.py       # Unit tests for the linter
-│   └── test_cli.py          # CLI and template/accent tests
+├── tests/                    # 181 tests across every module
 ├── pyproject.toml            # Package configuration + dependencies
 ├── LICENSE                   # MIT License
 ├── .gitignore
@@ -420,6 +562,8 @@ doc-engine-cli/
 | [`rich`](https://github.com/Textualize/rich) | Terminal formatting and progress indicators | MIT |
 | [`mistune`](https://github.com/lepture/mistune) | Markdown parser (pure Python) | BSD-3 |
 | [`typst`](https://github.com/messense/typst-py) | Typst compiler bindings | Apache-2.0 |
+| [`mermaidx`](https://github.com/MohammadRaziei/mermaidx) | Mermaid rendering without Node | MIT |
+| [`pillow`](https://github.com/python-pillow/Pillow) | Cutting pictures taller than a page | MIT-CMU |
 
 All dependencies are pure Python — no external binaries (Pandoc, LaTeX, etc.) are required.
 
@@ -483,8 +627,9 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build
 - [x] Line breaks (`<br>`)
 - [x] Task lists (`- [x]` / `- [ ]`)
 - [x] Footnotes (`[^1]`)
-- [x] Local images (remote images still render as alt-text)
-- [ ] Math blocks
+- [x] Local images, and remote ones with `--fetch-images`
+- [x] Math blocks (LaTeX `$…$` and `$$…$$`)
+- [x] Mermaid and SVG diagram blocks
 
 ---
 
@@ -497,11 +642,15 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build
 - [x] YAML front-matter support for metadata override
 - [x] Local image embedding
 - [x] Watch mode for continuous rebuilds
-- [ ] Math expressions (LaTeX-style `$...$`)
-- [ ] Multi-file documentation merge
-- [ ] Mermaid diagram rendering
-- [ ] Image downloading and embedding for remote URLs
-- [ ] PDF/A compliance for archival
+- [x] Math expressions (LaTeX-style `$...$`)
+- [x] Multi-file documentation merge
+- [x] Mermaid diagram rendering
+- [x] Image downloading and embedding for remote URLs
+- [x] PDF/A compliance for archival
+- [x] Page size selection
+- [x] Project-level configuration file
+- [ ] Syntax highlighting themes for code blocks
+- [ ] Cross-references between documents
 
 ---
 
