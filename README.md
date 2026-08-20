@@ -316,6 +316,12 @@ Then just build:
 doc-engine build
 ```
 
+<div align="center">
+<img src="assets/features-v2.gif" alt="doc-engine building a multi-file document" width="800"/>
+<br>
+<em>One manifest, one command: sections, a diagram, a figure, and a bibliography.</em>
+</div>
+
 Each entry is handled by what it is:
 
 | Entry | What happens |
