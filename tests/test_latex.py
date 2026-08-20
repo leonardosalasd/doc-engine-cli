@@ -111,6 +111,16 @@ class TestCompiles:
             r"x \in \mathbb{Z} \setminus \{0\}",
             r"\vec{v} \cdot \hat{n}",
             r"\max_{i} x_i",
+            r"P(S_n \mid \lnot S_{n-1})",
+            r"A \land B \lor \neg C",
+            r"\lfloor x \rfloor + \lceil y \rceil",
+            r"\bigoplus_{i} V_i",
+            r"x \longrightarrow y \hookrightarrow z",
+            r"a \preceq b \succeq c",
+            r"\overrightarrow{AB} \parallel \overrightarrow{CD}",
+            r"\therefore x \in \mathbb{R}",
+            r"\hbar \omega",
+            r"\uparrow \downarrow \nearrow",
         ],
     )
     def test_translation_compiles(self, expression: str, tmp_path) -> None:

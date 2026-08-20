@@ -1,16 +1,31 @@
 ---
 title: Payments API
-subtitle: Integration Guide · v1.1
+subtitle: Integration Guide · v2.0
 author: Platform Team
-template: technical
+template: report
 accent: teal
+paper: a4
 ---
 
 # Payments API
 
 A short, self-contained guide that shows what `doc-engine` turns Markdown into:
-front matter for metadata, task lists, footnotes, tables, and highlighted code —
-all from a single `README.md`.
+front matter for metadata, diagrams, math, task lists, footnotes, tables, and
+highlighted code — all from one file, with one command.
+
+## Architecture
+
+A fenced `mermaid` block becomes a real diagram, rendered without Node or a
+browser:
+
+```mermaid
+flowchart LR
+    Client -->|charge| API
+    API --> Ledger
+    API --> Queue
+    Queue --> Worker
+    Worker --> Webhook
+```
 
 ## Getting started
 
@@ -23,7 +38,23 @@ curl https://api.example.com/v1/charges \
   -d currency=usd
 ```
 
-The call returns a charge object with a stable `id` you can safely retry against.
+Note that `$API_KEY` above stays a shell variable — a `$` only becomes math
+when it wraps an expression, like $x^2$.
+
+## Rate limiting
+
+Requests are limited per account. The retry delay grows exponentially, where
+$n$ is the attempt number:
+
+$$
+t_n = t_0 \cdot 2^{\,n} \qquad n \in \mathbb{N}
+$$
+
+The probability that a retry succeeds given the previous one failed:
+
+$$
+P(S_n \mid \lnot S_{n-1}) = \frac{P(\lnot S_{n-1} \mid S_n)\,P(S_n)}{P(\lnot S_{n-1})}
+$$
 
 ## Status codes
 

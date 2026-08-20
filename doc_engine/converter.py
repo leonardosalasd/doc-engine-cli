@@ -121,6 +121,7 @@ class TypstRenderer(mistune.BaseRenderer):
         self.warnings: list[str] = []
         self._footnotes: dict[str, str] = {}
         self._asset_names: dict[str, str] = {}
+        self._cut_pieces: dict[str, list[str]] = {}
         self.assets: dict[str, str] = {}
         self.generated: dict[str, str] = {}
 
@@ -160,6 +161,12 @@ class TypstRenderer(mistune.BaseRenderer):
         return "\n#pagebreak(weak: true)\n".join(f'#fit-image("{p}")' for p in pieces)
 
     def _cut(self, asset: str) -> list[str]:
+        # The same picture can appear more than once, and it is registered under
+        # one name, so the pieces are remembered. Cutting twice would look for a
+        # file whose entry the first pass already replaced.
+        if asset in self._cut_pieces:
+            return self._cut_pieces[asset]
+
         source = Path(self.assets.get(asset, ""))
         if not source.is_file() or self._work_dir is None:
             return [asset]
@@ -177,6 +184,7 @@ class TypstRenderer(mistune.BaseRenderer):
             self.assets[name] = str(piece)
             names.append(name)
         del self.assets[asset]
+        self._cut_pieces[asset] = names
         return names
 
     def linebreak(self, token: dict, state: Any) -> str:

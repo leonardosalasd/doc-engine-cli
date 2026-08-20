@@ -83,6 +83,59 @@ jobs:
           mkdir -p "$RUNNER_TEMP/smoke" && cd "$RUNNER_TEMP/smoke"
           doc-engine --version
           doc-engine info
-          printf -- '---\ntitle: Smoke\naccent: teal\n---\n\n# Smoke\n\nText with a footnote[^1], a bracket ], and a task.\n\n- [x] done\n\n[^1]: note\n' > README.md
+          doc-engine --help
+          {
+            echo '---'
+            echo 'title: Smoke'
+            echo 'accent: teal'
+            echo '---'
+            echo
+            echo '# Smoke'
+            echo
+            echo 'A footnote[^1], a bracket ], a task, $10 in cash, and math $x^2$.'
+            echo
+            echo '- [x] done'
+            echo
+            echo '| A | B |'
+            echo '|---|---|'
+            echo '| 1 | 2 |'
+            echo
+            echo '```mermaid'
+            echo 'flowchart LR'
+            echo '  A-->B'
+            echo '```'
+            echo
+            echo '$$'
+            echo '\frac{-b \pm \sqrt{b^2-4ac}}{2a}'
+            echo '$$'
+            echo
+            echo '[^1]: note'
+          } > README.md
           doc-engine build
           test -f README_doc.pdf
+          doc-engine build --paper us-letter --template report --pdf-standard a-2b -o archival.pdf
+          test -f archival.pdf
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build the image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: doc-engine-cli:ci
+
+      - name: Run the CLI inside it
+        run: |
+          mkdir -p "$RUNNER_TEMP/docker-smoke"
+          printf '# Docker\n\nText and math $x^2$.\n\n```mermaid\nflowchart LR\n  A-->B\n```\n' \
+            > "$RUNNER_TEMP/docker-smoke/README.md"
+          docker run --rm -v "$RUNNER_TEMP/docker-smoke:/workspace" doc-engine-cli:ci build
+          test -f "$RUNNER_TEMP/docker-smoke/README_doc.pdf"

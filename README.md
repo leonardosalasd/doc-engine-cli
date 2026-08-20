@@ -61,15 +61,19 @@ That's it. Zero configuration required.
 
 ---
 
-## 🎓 Academic Features (v0.1.2+)
+## Academic Writing
 
-`doc-engine-cli` ships with a premium scientific layout (using Linux Libertine and Inter font-families) and **Zero-Config Bibliography** handling. 
+Cite with the usual `[@citation-key]` syntax and drop a `refs.bib`,
+`references.bib`, or `bibliography.bib` next to your document. It is picked up
+automatically and rendered as an IEEE-styled references section:
 
-To add an IEEE-styled bibliography to your PDF:
-1. Create a `refs.bib`, `references.bib`, or `bibliography.bib` file in your repository.
-2. In your `README.md`, cite using standard syntax: `[@citation-key]`.
+```markdown
+As shown in [@smith2020], results vary.
+```
 
-When you run `doc-engine build`, the CLI will automatically detect your `.bib` file, securely bind it to the sandbox, and inject a formatted References page at the end of the document.
+Point `--bib` at a different file, or name one in front matter, to override the
+search. Combine it with the `academic`, `article`, or `report` layout and LaTeX
+math for a paper that needs no LaTeX toolchain.
 
 ---
 

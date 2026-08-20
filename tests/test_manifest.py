@@ -100,3 +100,27 @@ class TestAssembly:
         (tmp_path / "doc-engine.md").write_text("- [One](one/page.md)\n- [Two](two/page.md)\n")
         conversion = manifest.assemble(manifest.load(tmp_path / "doc-engine.md"))
         assert len(conversion.assets) == 2
+
+
+class TestIncludedFileQuirks:
+    def test_front_matter_in_an_included_file_is_not_rendered(self, tmp_path) -> None:
+        (tmp_path / "a.md").write_text("---\ntitle: Internal\n---\n\n# Real Heading\n\nBody.\n")
+        (tmp_path / "doc-engine.md").write_text("- [A](a.md)\n")
+        body = manifest.assemble(manifest.load(tmp_path / "doc-engine.md")).body
+        assert "title: Internal" not in body
+        assert "Real Heading" in body
+
+    def test_caption_is_escaped_for_typst(self, tmp_path) -> None:
+        (tmp_path / "p.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+        (tmp_path / "d.md").write_text("# D\n")
+        (tmp_path / "doc-engine.md").write_text("- [Cost $5 and #1](p.svg)\n- [D](d.md)\n")
+        body = manifest.assemble(manifest.load(tmp_path / "doc-engine.md")).body
+        assert "\\$5" in body
+        assert "\\#1" in body
+
+    def test_empty_label_produces_a_plain_picture(self, tmp_path) -> None:
+        (tmp_path / "p.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+        (tmp_path / "d.md").write_text("# D\n")
+        (tmp_path / "doc-engine.md").write_text("- [](p.svg)\n- [D](d.md)\n")
+        body = manifest.assemble(manifest.load(tmp_path / "doc-engine.md")).body
+        assert "caption" not in body

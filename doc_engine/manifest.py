@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from doc_engine import diagrams, frontmatter
-from doc_engine.converter import Conversion, convert_document
+from doc_engine.converter import Conversion, convert, convert_document
 
 MANIFEST_NAMES = ("doc-engine.md", "docengine.md", "SUMMARY.md")
 
@@ -134,8 +134,12 @@ def assemble(
     for position, entry in enumerate(manifest.entries):
         namespace = f"e{position}_"
         if entry.kind == "markdown":
+            # An included file may carry its own front matter, from back when it
+            # was built on its own. The manifest owns the metadata now, so only
+            # the body is used.
+            _, text = frontmatter.parse(entry.path.read_text(encoding="utf-8"))
             piece = convert_document(
-                entry.path.read_text(encoding="utf-8"),
+                text,
                 base_dir=entry.path.parent,
                 namespace=namespace,
                 work_dir=work_dir,
@@ -161,10 +165,11 @@ def assemble(
 
 
 def _figure(name: str, label: str) -> str:
-    picture = f'#align(center)[#fit-image("{name}")]'
     if not label:
-        return picture
-    caption = label.replace("\\", "\\\\").replace('"', '\\"')
+        return f'#align(center)[#fit-image("{name}")]'
+    # The label is Markdown, and it lands in Typst content, so it goes through
+    # the converter — otherwise a caption like "Cost $5" would be read as math.
+    caption = convert(label).strip()
     return f'#figure(fit-image("{name}"), caption: [{caption}])'
 
 

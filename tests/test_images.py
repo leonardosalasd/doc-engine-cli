@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from doc_engine import images
@@ -88,3 +90,27 @@ class TestConversion:
         conversion = convert_document("![Flow](tall.png)", base_dir=tmp_path)
         assert conversion.body.count("fit-image") == 1
         assert len(conversion.assets) == 1
+
+
+class TestRepeatedPictures:
+    def test_the_same_tall_picture_twice_keeps_every_reference_valid(self, tmp_path) -> None:
+        picture(tmp_path / "tall.png", 700, 3200)
+        conversion = convert_document(
+            "![one](tall.png)\n\n![two](tall.png)\n",
+            base_dir=tmp_path,
+            work_dir=tmp_path / "work",
+            split_tall=images.page_ratio("a4"),
+        )
+        referenced = [chunk.split('"')[1] for chunk in conversion.body.split("fit-image(")[1:]]
+        assert referenced
+        assert all(name in conversion.assets for name in referenced)
+
+    def test_it_is_only_cut_once(self, tmp_path) -> None:
+        picture(tmp_path / "tall.png", 700, 3200)
+        conversion = convert_document(
+            "![one](tall.png)\n\n![two](tall.png)\n",
+            base_dir=tmp_path,
+            work_dir=tmp_path / "work",
+            split_tall=images.page_ratio("a4"),
+        )
+        assert len({Path(p).name for p in conversion.assets.values()}) == len(conversion.assets)
