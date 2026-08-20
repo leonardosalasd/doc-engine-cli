@@ -35,7 +35,7 @@
     },
   )
 
-  set text(font: ("Inter", "Helvetica Neue", "Arial"), size: 10.5pt, fill: ink, lang: "en")
+  set text(font: ("Inter", "Helvetica Neue", "Arial", "Libertinus Serif"), size: 10.5pt, fill: ink, lang: "en")
   set par(justify: false, leading: 0.8em, spacing: 1.1em)
 
   show raw.where(block: true): it => block(
@@ -43,14 +43,14 @@
     inset: (x: 16pt, y: 12pt),
     radius: 8pt,
     width: 100%,
-    text(font: ("Cascadia Code", "Consolas", "Courier New"), size: 8.5pt, fill: ink, it),
+    text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas", "Courier New"), size: 8.5pt, fill: ink, it),
   )
 
   show raw.where(block: false): it => box(
     fill: surface,
     inset: (x: 5pt, y: 2pt),
     radius: 3pt,
-    text(font: ("Cascadia Code", "Consolas", "Courier New"), size: 9pt, fill: accent-color, it),
+    text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas", "Courier New"), size: 9pt, fill: accent-color, it),
   )
 
   show heading.where(level: 1): it => block(width: 100%)[

@@ -8,8 +8,18 @@ from doc_engine.compiler import DEFAULT_PAPER, _build_main, available_templates
 class TestTemplates:
     def test_ships_expected_templates(self) -> None:
         names = available_templates()
-        for expected in ("academic", "modern", "minimal", "technical", "book"):
+        for expected in ("academic", "article", "book", "minimal", "modern", "report", "technical"):
             assert expected in names
+
+    def test_every_template_accepts_the_documented_options(self) -> None:
+        """A template that drops an option would fail only at compile time."""
+        from doc_engine.compiler import template_path
+
+        for name in available_templates():
+            source = template_path(name).read_text(encoding="utf-8")
+            for option in ("title:", "subtitle:", "author:", "paper:", "accent:", "branding:"):
+                assert option in source, f"{name} is missing {option}"
+            assert "..options" in source, f"{name} has no options sink"
 
     def test_build_main_injects_options(self) -> None:
         main = _build_main("body", "Title", "Me", "none", 'rgb("#ff0000")', False, "1.0.0")

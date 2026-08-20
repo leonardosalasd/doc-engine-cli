@@ -23,34 +23,34 @@
     margin: (top: 1.3in, bottom: 1.3in, left: 1.4in, right: 1.4in),
     header: context {
       if counter(page).get().first() > 1 [
-        #set text(font: ("Linux Libertine", "Times New Roman"), size: 9pt, fill: muted, style: "italic")
+        #set text(font: ("Linux Libertine", "Libertinus Serif", "Times New Roman"), size: 9pt, fill: muted, style: "italic")
         #align(center)[#title]
       ]
     },
     footer: context {
-      set text(font: ("Linux Libertine", "Times New Roman"), size: 9pt, fill: muted)
+      set text(font: ("Linux Libertine", "Libertinus Serif", "Times New Roman"), size: 9pt, fill: muted)
       align(center)[#counter(page).display("— i —")]
     },
   )
 
-  set text(font: ("Linux Libertine", "New Computer Modern", "Times New Roman"), size: 11.5pt, fill: ink, lang: "en")
+  set text(font: ("Linux Libertine", "Libertinus Serif", "New Computer Modern", "Times New Roman"), size: 11.5pt, fill: ink, lang: "en")
   set par(justify: true, leading: 0.75em, first-line-indent: 1.4em, spacing: 0.75em)
 
-  show heading: set text(font: ("Linux Libertine", "Times New Roman"))
+  show heading: set text(font: ("Linux Libertine", "Libertinus Serif", "Times New Roman"))
 
   show raw.where(block: true): it => block(
     fill: surface,
     inset: (x: 14pt, y: 10pt),
     radius: 2pt,
     width: 100%,
-    text(font: ("Cascadia Code", "Consolas", "Courier New"), size: 8.5pt, fill: ink, it),
+    text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas", "Courier New"), size: 8.5pt, fill: ink, it),
   )
 
   show raw.where(block: false): it => box(
     fill: surface,
     inset: (x: 4pt, y: 1pt),
     radius: 2pt,
-    text(font: ("Cascadia Code", "Consolas", "Courier New"), size: 9pt, it),
+    text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas", "Courier New"), size: 9pt, it),
   )
 
   show heading.where(level: 1): it => {
