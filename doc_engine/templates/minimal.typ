@@ -7,6 +7,8 @@
   accent: none,
   branding: true,
   version: "",
+  paper: "a4",
+  ..options,
   body,
 ) = {
   let accent-color = if accent == none { rgb("#111827") } else { accent }
@@ -17,7 +19,7 @@
   set document(author: author, title: title)
 
   set page(
-    paper: "us-letter",
+    paper: paper,
     margin: (top: 1in, bottom: 1in, left: 1in, right: 1in),
     footer: context {
       set text(font: "Inter", size: 8pt, fill: muted)
@@ -33,7 +35,7 @@
     },
   )
 
-  set text(font: ("Inter", "Helvetica Neue", "Arial"), size: 10.5pt, fill: ink, lang: "en")
+  set text(font: ("Inter", "Helvetica Neue", "Arial", "Libertinus Serif"), size: 10.5pt, fill: ink, lang: "en")
   set par(justify: false, leading: 0.72em, spacing: 0.95em)
 
   show raw.where(block: true): it => block(
@@ -41,14 +43,14 @@
     inset: (x: 12pt, y: 9pt),
     radius: 3pt,
     width: 100%,
-    text(font: ("Cascadia Code", "Consolas", "Courier New"), size: 8.5pt, fill: ink, it),
+    text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas", "Courier New"), size: 8.5pt, fill: ink, it),
   )
 
   show raw.where(block: false): it => box(
     fill: surface,
     inset: (x: 4pt, y: 1pt),
     radius: 2pt,
-    text(font: ("Cascadia Code", "Consolas", "Courier New"), size: 9pt, it),
+    text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas", "Courier New"), size: 9pt, it),
   )
 
   show heading.where(level: 1): it => block[

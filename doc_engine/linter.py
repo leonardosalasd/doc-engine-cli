@@ -50,9 +50,7 @@ def lint(markdown: str) -> list[Issue]:
         issues.extend(_check_links(line, number))
 
     if in_fence:
-        issues.append(
-            Issue(fence_opened_at, 1, "error", "unclosed fenced code block")
-        )
+        issues.append(Issue(fence_opened_at, 1, "error", "unclosed fenced code block"))
 
     return issues
 
@@ -66,13 +64,9 @@ def _check_links(line: str, number: int) -> list[Issue]:
         if url:
             continue
         if is_image:
-            found.append(
-                Issue(number, column, "warning", "image source is empty")
-            )
+            found.append(Issue(number, column, "warning", "image source is empty"))
         else:
-            found.append(
-                Issue(number, column, "error", "link URL must not be empty")
-            )
+            found.append(Issue(number, column, "error", "link URL must not be empty"))
     return found
 
 

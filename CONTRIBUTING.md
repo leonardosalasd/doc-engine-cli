@@ -67,7 +67,16 @@ passes after it — that is what stops the same bug from coming back.
 
 ## Code style
 
-There is no autoformatter in this project. Match the surrounding code:
+Formatting and linting are handled by [ruff](https://docs.astral.sh/ruff/), and
+CI checks both. Before opening a pull request:
+
+```bash
+ruff format doc_engine/ tests/
+ruff check doc_engine/ tests/
+```
+
+Ruff settles the mechanical questions. The rest is convention — match the
+surrounding code:
 
 - Type hints on function signatures.
 - Module-level constants in `SCREAMING_SNAKE_CASE`, prefixed with `_` when private.

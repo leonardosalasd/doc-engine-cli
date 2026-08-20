@@ -8,8 +8,18 @@ from doc_engine.compiler import _build_main, available_templates
 class TestTemplates:
     def test_ships_expected_templates(self) -> None:
         names = available_templates()
-        for expected in ("academic", "modern", "minimal", "technical", "book"):
+        for expected in ("academic", "article", "book", "minimal", "modern", "report", "technical"):
             assert expected in names
+
+    def test_every_template_accepts_the_documented_options(self) -> None:
+        """A template that drops an option would fail only at compile time."""
+        from doc_engine.compiler import template_path
+
+        for name in available_templates():
+            source = template_path(name).read_text(encoding="utf-8")
+            for option in ("title:", "subtitle:", "author:", "paper:", "accent:", "branding:"):
+                assert option in source, f"{name} is missing {option}"
+            assert "..options" in source, f"{name} has no options sink"
 
     def test_build_main_injects_options(self) -> None:
         main = _build_main("body", "Title", "Me", "none", 'rgb("#ff0000")', False, "1.0.0")
@@ -18,7 +28,9 @@ class TestTemplates:
         assert 'version: "1.0.0"' in main
 
     def test_build_main_injects_subtitle_and_date(self) -> None:
-        main = _build_main("body", "T", "Me", "none", "none", True, "1.0.0", "A subtitle", "2026-07-28")
+        main = _build_main(
+            "body", "T", "Me", "none", "none", True, "1.0.0", "A subtitle", "2026-07-28"
+        )
         assert 'subtitle: "A subtitle"' in main
         assert 'date: "2026-07-28"' in main
 
@@ -28,7 +40,21 @@ class TestTemplates:
     def test_custom_template_path_is_rejected_when_missing(self, tmp_path) -> None:
         doc = tmp_path / "doc.md"
         doc.write_text("# T\n\nText.\n")
-        result = CliRunner().invoke(cli, ["build", str(doc), "--template", "missing.typ", "--dry-run"])
+        result = CliRunner().invoke(
+            cli, ["build", str(doc), "--template", "missing.typ", "--dry-run"]
+        )
+        assert result.exit_code == 2
+
+
+class TestPaper:
+    def test_build_main_injects_paper(self) -> None:
+        main = _build_main("body", "T", "Me", "none", "none", True, "2.0.0", "", None, "a5")
+        assert 'paper: "a5"' in main
+
+    def test_invalid_paper_flag_is_rejected(self, tmp_path) -> None:
+        doc = tmp_path / "doc.md"
+        doc.write_text("# T\n\nText.\n")
+        result = CliRunner().invoke(cli, ["build", str(doc), "--paper", "banana", "--dry-run"])
         assert result.exit_code == 2
 
 
@@ -96,3 +122,37 @@ class TestAccentValidation:
         good.write_text("# T\n\nText.\n")
         result = CliRunner().invoke(cli, ["build", str(good), "--template", "nope", "--dry-run"])
         assert result.exit_code == 2
+
+
+class TestHelp:
+    def test_top_level_help_lists_build_options(self) -> None:
+        result = CliRunner().invoke(cli, ["--help"])
+        assert result.exit_code == 0
+        for expected in ("--template", "--accent", "--paper", "--watch"):
+            assert expected in result.output
+
+    def test_top_level_help_groups_options(self) -> None:
+        result = CliRunner().invoke(cli, ["--help"])
+        for heading in ("Input and output", "Document details", "Appearance"):
+            assert heading in result.output
+
+    def test_top_level_help_shows_examples_and_commands(self) -> None:
+        result = CliRunner().invoke(cli, ["--help"])
+        assert "Examples" in result.output
+        assert "doc-engine info" in result.output
+
+    def test_build_help_still_works(self) -> None:
+        result = CliRunner().invoke(cli, ["build", "--help"])
+        assert result.exit_code == 0
+        assert "--output" in result.output
+
+    def test_bare_invocation_shows_help(self) -> None:
+        result = CliRunner().invoke(cli, [])
+        assert result.exit_code == 0
+        assert "Usage" in result.output
+
+    def test_info_lists_capabilities(self) -> None:
+        result = CliRunner().invoke(cli, ["info"])
+        flat = " ".join(result.output.split())
+        assert "mermaid" in flat
+        assert "math" in flat.lower()

@@ -7,6 +7,8 @@
   accent: none,
   branding: true,
   version: "",
+  paper: "a4",
+  ..options,
   body,
 ) = {
   let accent-color = if accent == none { rgb("#7c3aed") } else { accent }
@@ -18,18 +20,18 @@
   set document(author: author, title: title)
 
   set page(
-    paper: "us-letter",
+    paper: paper,
     margin: (top: 1.1in, bottom: 1.1in, left: 1.1in, right: 1.1in),
     header: context {
       if counter(page).get().first() > 1 [
-        #set text(font: ("Cascadia Code", "Consolas"), size: 7.5pt, fill: muted)
+        #set text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas"), size: 7.5pt, fill: muted)
         #stack(dir: ltr, spacing: 1fr, title, author)
         #v(-0.3em)
         #line(length: 100%, stroke: 0.5pt + line-color)
       ]
     },
     footer: context {
-      set text(font: ("Cascadia Code", "Consolas"), size: 7.5pt, fill: muted)
+      set text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas"), size: 7.5pt, fill: muted)
       if branding {
         grid(
           columns: (1fr, auto),
@@ -42,7 +44,7 @@
     },
   )
 
-  set text(font: ("Inter", "Helvetica Neue", "Arial"), size: 10pt, fill: ink, lang: "en")
+  set text(font: ("Inter", "Helvetica Neue", "Arial", "Libertinus Serif"), size: 10pt, fill: ink, lang: "en")
   set par(justify: true, leading: 0.68em, spacing: 1em)
 
   show raw.where(block: true): it => block(
@@ -51,7 +53,7 @@
     radius: 0pt,
     width: 100%,
     stroke: (left: 2.5pt + accent-color, rest: 0.5pt + line-color),
-    text(font: ("Cascadia Code", "Consolas", "Courier New"), size: 8.5pt, fill: ink, it),
+    text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas", "Courier New"), size: 8.5pt, fill: ink, it),
   )
 
   show raw.where(block: false): it => box(
@@ -59,7 +61,7 @@
     inset: (x: 4pt, y: 2pt),
     radius: 2pt,
     stroke: 0.5pt + line-color,
-    text(font: ("Cascadia Code", "Consolas", "Courier New"), size: 9pt, it),
+    text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas", "Courier New"), size: 9pt, it),
   )
 
   show heading.where(level: 1): it => block(width: 100%, sticky: true)[
@@ -84,7 +86,7 @@
   ]
 
   show heading.where(level: 3): it => block(sticky: true)[
-    #set text(size: 10.5pt, weight: 700, fill: accent-color, font: ("Cascadia Code", "Consolas"))
+    #set text(size: 10.5pt, weight: 700, fill: accent-color, font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas"))
     #v(0.7em)
     #it
     #v(0.2em)
@@ -92,7 +94,7 @@
 
   block(width: 100%, fill: accent-color, inset: (x: 28pt, y: 36pt), radius: 4pt)[
     #set text(fill: white)
-    #text(font: ("Cascadia Code", "Consolas"), size: 9pt, fill: white.transparentize(20%))[TECHNICAL DOCUMENT]
+    #text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas"), size: 9pt, fill: white.transparentize(20%))[TECHNICAL DOCUMENT]
     #v(1.2em)
     #text(font: "Inter", size: 34pt, weight: 800, tracking: -1pt)[#title]
     #if subtitle != "" [
@@ -109,7 +111,7 @@
   )
   if branding {
     v(0.6em)
-    text(font: ("Cascadia Code", "Consolas"), size: 8pt, fill: muted)[doc-engine v#version]
+    text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas"), size: 8pt, fill: muted)[doc-engine v#version]
   }
   pagebreak()
 

@@ -141,7 +141,7 @@ class TestImages:
         (tmp_path / "logo.png").write_bytes(b"\x89PNG\r\n")
         conversion = convert_document("![logo](logo.png)", base_dir=tmp_path)
         name = next(iter(conversion.assets))
-        assert f'#image("{name}")' in conversion.body
+        assert f'#fit-image("{name}")' in conversion.body
         assert conversion.assets[name].endswith("logo.png")
 
     def test_repeated_image_is_registered_once(self, tmp_path) -> None:
@@ -158,3 +158,20 @@ class TestImages:
         conversion = convert_document("![alt](nope.png)", base_dir=tmp_path)
         assert conversion.assets == {}
         assert "[alt]" in conversion.body
+
+
+class TestTables:
+    def test_all_header_columns_are_kept(self) -> None:
+        result = convert("| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |\n")
+        assert "columns: (1fr, 1fr, 1fr)" in result
+        for header in ("[*A*]", "[*B*]", "[*C*]"):
+            assert header in result
+
+    def test_body_cells_follow_the_header(self) -> None:
+        result = convert("| A | B |\n|---|---|\n| 1 | 2 |\n")
+        assert "columns: (1fr, 1fr)" in result
+        assert "[1]" in result and "[2]" in result
+
+    def test_single_column_table(self) -> None:
+        result = convert("| Only |\n|---|\n| one |\n")
+        assert "columns: (1fr)" in result

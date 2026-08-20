@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "doc-engine-cli"
-version = "1.1.1"
+version = "2.0.0"
 authors = [
   { name = "Leonardo Salas", email = "leonardo.salas01@outlook.com" },
 ]
@@ -32,12 +32,15 @@ dependencies = [
     "rich>=13.0",
     "mistune>=3.0",
     "typst>=0.11",
+    "mermaidx>=0.9",
+    "pillow>=10.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "ruff>=0.6",
 ]
 
 [project.urls]
@@ -53,3 +56,14 @@ include = ["doc_engine*"]
 
 [tool.setuptools.package-data]
 doc_engine = ["templates/*.typ"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]

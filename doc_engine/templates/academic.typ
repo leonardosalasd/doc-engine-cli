@@ -7,6 +7,8 @@
   accent: none,
   branding: true,
   version: "",
+  paper: "a4",
+  ..options,
   body,
 ) = {
   let accent-color = if accent == none { rgb("#2563eb") } else { accent }
@@ -18,7 +20,7 @@
   set document(author: author, title: title)
 
   set page(
-    paper: "us-letter",
+    paper: paper,
     margin: (top: 1.2in, bottom: 1.2in, left: 1.1in, right: 1.1in),
     header: context {
       if counter(page).get().first() > 1 [
@@ -42,10 +44,10 @@
     },
   )
 
-  set text(font: ("Linux Libertine", "New Computer Modern", "Times New Roman"), size: 11pt, fill: primary, lang: "en")
+  set text(font: ("Linux Libertine", "Libertinus Serif", "New Computer Modern", "Times New Roman"), size: 11pt, fill: primary, lang: "en")
   set par(justify: true, leading: 0.7em, first-line-indent: 1.2em)
 
-  show heading: set text(font: ("Inter", "Helvetica Neue", "Arial"))
+  show heading: set text(font: ("Inter", "Helvetica Neue", "Arial", "Libertinus Serif"))
 
   show raw.where(block: true): it => block(
     fill: surface,
@@ -53,14 +55,14 @@
     radius: 4pt,
     width: 100%,
     stroke: 0.5pt + divider,
-    text(font: ("Cascadia Code", "Consolas", "Courier New"), size: 8.5pt, fill: primary, it),
+    text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas", "Courier New"), size: 8.5pt, fill: primary, it),
   )
 
   show raw.where(block: false): it => box(
     fill: surface,
     inset: (x: 4pt, y: 2pt),
     radius: 2pt,
-    text(font: ("Cascadia Code", "Consolas", "Courier New"), size: 9pt, it),
+    text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas", "Courier New"), size: 9pt, it),
   )
 
   show heading.where(level: 1): it => block(sticky: true, width: 100%)[

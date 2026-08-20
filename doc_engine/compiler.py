@@ -6,6 +6,24 @@ import typst
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 DEFAULT_TEMPLATE = "academic"
+DEFAULT_PAPER = "a4"
+
+# Archival profiles typst-py accepts. a-2b is the usual choice for documents
+# that have to be readable decades from now; a-3b additionally allows embedded
+# attachments.
+PDF_STANDARDS = ("a-2b", "a-3b")
+
+PAPER_SIZES = (
+    "a3",
+    "a4",
+    "a5",
+    "a6",
+    "iso-b5",
+    "jis-b5",
+    "us-legal",
+    "us-letter",
+    "us-tabloid",
+)
 
 
 def available_templates() -> list[str]:
@@ -38,6 +56,9 @@ def compile_pdf(
     subtitle: str = "",
     date: str | None = None,
     assets: dict[str, str] | None = None,
+    generated: dict[str, str] | None = None,
+    paper: str = DEFAULT_PAPER,
+    pdf_standard: str | None = None,
 ) -> None:
     source = template_path(template)
     if not source.exists():
@@ -61,18 +82,47 @@ def compile_pdf(
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(origin, destination)
 
+        for name, content in (generated or {}).items():
+            destination = tmp / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(content, encoding="utf-8")
+
         accent_inject = f'rgb("{accent}")' if accent else "none"
 
         main_file = tmp / "main.typ"
         main_file.write_text(
             _build_main(
-                typst_body, title, author, bib_inject, accent_inject,
-                branding, version, subtitle, date,
+                typst_body,
+                title,
+                author,
+                bib_inject,
+                accent_inject,
+                branding,
+                version,
+                subtitle,
+                date,
+                paper,
             ),
             encoding="utf-8",
         )
 
-        typst.compile(str(main_file), output=resolved_output)
+        if pdf_standard:
+            typst.compile(str(main_file), output=resolved_output, pdf_standards=[pdf_standard])
+        else:
+            typst.compile(str(main_file), output=resolved_output)
+
+
+# Pictures keep their natural size unless they do not fit the text block, in
+# which case they shrink until they do. Forcing every image to full width blows
+# up small diagrams, and constraining only the width lets a tall one run past
+# the bottom of the page, where Typst clips whatever does not fit.
+_FIT_IMAGE = """#let fit-image(path) = context layout(area => {
+  let img = image(path)
+  let natural = measure(img)
+  let scale = calc.min(1.0, area.width / natural.width, area.height / natural.height)
+  if scale >= 1.0 { img } else { image(path, width: natural.width * scale) }
+})
+"""
 
 
 def _build_main(
@@ -85,10 +135,12 @@ def _build_main(
     version: str,
     subtitle: str = "",
     date: str | None = None,
+    paper: str = DEFAULT_PAPER,
 ) -> str:
     date_line = f'  date: "{_escape(date)}",\n' if date else ""
     return (
         '#import "template.typ": setup_doc\n\n'
+        f"{_FIT_IMAGE}\n"
         "#show: setup_doc.with(\n"
         f'  title: "{_escape(title)}",\n'
         f'  subtitle: "{_escape(subtitle)}",\n'
@@ -98,6 +150,7 @@ def _build_main(
         f"  accent: {accent_inject},\n"
         f"  branding: {'true' if branding else 'false'},\n"
         f'  version: "{version}",\n'
+        f'  paper: "{paper}",\n'
         ")\n\n"
         f"{body}"
     )

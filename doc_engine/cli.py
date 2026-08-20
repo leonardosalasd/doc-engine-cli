@@ -1,17 +1,28 @@
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 import click
-from rich.console import Console
+from rich.console import Console, Group
 from rich.panel import Panel
+from rich.table import Table
 
-from doc_engine import __version__, frontmatter
-from doc_engine.compiler import DEFAULT_TEMPLATE, available_templates, compile_pdf
+from doc_engine import __version__, config, frontmatter, images, manifest, settings
+from doc_engine.compiler import (
+    DEFAULT_PAPER,
+    PAPER_SIZES,
+    PDF_STANDARDS,
+    available_templates,
+    compile_pdf,
+)
 from doc_engine.converter import convert_document, extract_title, strip_first_heading
+from doc_engine.diagrams import DiagramError
+from doc_engine.help import RichCommand, RichGroup
 from doc_engine.linter import has_errors, lint
 
 if sys.platform == "win32":
@@ -134,15 +145,15 @@ def _print_issues(issues: list, filename: str) -> None:
         console.print(f"  [{color}]{issue.format(filename)}[/{color}]")
 
 
-@click.group(invoke_without_command=True)
+@click.group(cls=RichGroup, invoke_without_command=True)
 @click.version_option(__version__, prog_name="doc-engine")
 @click.pass_context
 def cli(ctx: click.Context) -> None:
     if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
+        ctx.get_help()
 
 
-@cli.command()
+@cli.command(cls=RichCommand)
 @click.argument("input_file", required=False, type=click.Path(exists=False))
 @click.option("-o", "--output", default=None, help="Output PDF file path.")
 @click.option("-t", "--title", default=None, help="Document title override.")
@@ -161,11 +172,56 @@ def cli(ctx: click.Context) -> None:
     callback=_normalize_accent,
     help="Accent color as a hex value (#2563eb) or a name (blue, teal, rose...).",
 )
+@click.option(
+    "--paper",
+    default=None,
+    type=click.Choice(PAPER_SIZES, case_sensitive=False),
+    help=f"Page size (default: {DEFAULT_PAPER}).",
+)
 @click.option("--bib", default=None, help="Path to a custom .bib file.")
-@click.option("--no-branding", "no_branding", is_flag=True, help="Hide the doc-engine attribution in the PDF.")
-@click.option("--dry-run", "dry_run", is_flag=True, help="Check the Markdown for errors without producing a PDF.")
-@click.option("-w", "--watch", "watch", is_flag=True, help="Rebuild automatically whenever the source changes.")
-@click.option("-f", "--force", "force", is_flag=True, help="Overwrite the output file instead of writing a new one.")
+@click.option(
+    "--no-branding", "no_branding", is_flag=True, help="Hide the doc-engine attribution in the PDF."
+)
+@click.option(
+    "--dry-run",
+    "dry_run",
+    is_flag=True,
+    help="Check the Markdown for errors without producing a PDF.",
+)
+@click.option(
+    "--pdf-standard",
+    "pdf_standard",
+    default=None,
+    type=click.Choice(PDF_STANDARDS, case_sensitive=False),
+    help="Write an archival PDF/A file.",
+)
+@click.option(
+    "--tall-images",
+    "tall_images",
+    default=None,
+    type=click.Choice(("fit", "split"), case_sensitive=False),
+    help="What to do with a picture taller than a page (default: fit).",
+)
+@click.option(
+    "--fetch-images",
+    "fetch_images",
+    is_flag=True,
+    help="Download images that are linked by URL instead of skipping them.",
+)
+@click.option(
+    "-w",
+    "--watch",
+    "watch",
+    is_flag=True,
+    help="Rebuild automatically whenever the source changes.",
+)
+@click.option(
+    "-f",
+    "--force",
+    "force",
+    is_flag=True,
+    help="Overwrite the output file instead of writing a new one.",
+)
 @click.option("--open", "open_pdf", is_flag=True, help="Open the PDF after generation.")
 def build(
     input_file: str | None,
@@ -176,8 +232,12 @@ def build(
     date: str | None,
     template: str | None,
     accent: str | None,
+    paper: str | None,
     bib: str | None,
     no_branding: bool,
+    pdf_standard: str | None,
+    tall_images: str | None,
+    fetch_images: bool,
     dry_run: bool,
     watch: bool,
     force: bool,
@@ -194,14 +254,23 @@ def build(
 
     cwd = Path.cwd()
 
+    try:
+        project = config.load(cwd)
+    except config.ConfigError as exc:
+        console.print(f"[bold red]Error:[/bold red] {exc}")
+        raise SystemExit(1) from exc
+    if project:
+        console.print(f"  [dim]Settings:[/dim] [cyan]{config.CONFIG_NAME}[/cyan]")
+
     if input_file:
         input_path = Path(input_file)
     else:
-        input_path = _find_file(cwd, _README_CANDIDATES)
+        input_path = manifest.find(cwd) or _find_file(cwd, _README_CANDIDATES)
         if not input_path:
             console.print(
-                "[bold red]Error:[/bold red] No README.md found in current directory.\n"
-                "[dim]Provide an input file or run from a directory containing a README.md.[/dim]"
+                "[bold red]Error:[/bold red] Nothing to build in this directory.\n"
+                "[dim]Add a README.md, write a doc-engine.md manifest, "
+                "or name a file to convert.[/dim]"
             )
             raise SystemExit(1)
         console.print(f"  [dim]Auto-detected:[/dim] [cyan]{input_path.name}[/cyan]")
@@ -220,47 +289,109 @@ def build(
         console.print("[bold green]✓[/bold green] No issues found.")
         return
 
+    flags = {
+        "template": template,
+        "paper": paper,
+        "accent": accent,
+        "author": author,
+        "bib": bib,
+        "pdf_standard": pdf_standard,
+        "no_branding": no_branding,
+        "fetch_images": fetch_images,
+        "tall_images": tall_images,
+    }
+
     output_path = Path(output) if output else Path(f"{input_path.stem}_doc.pdf")
     if not force:
         output_path = _unique_path(output_path)
 
     def run() -> bool:
-        raw = input_path.read_text(encoding="utf-8")
-        meta, content = frontmatter.parse(raw)
-
-        issues = lint(raw)
-        if issues:
-            _print_issues(issues, str(input_path))
-            console.print()
-            if has_errors(issues):
-                console.print("[bold red]Aborted:[/bold red] fix the errors above, or run [cyan]--dry-run[/cyan] to recheck.")
+        collected: manifest.Manifest | None = None
+        if manifest.is_manifest(input_path):
+            try:
+                collected = manifest.load(input_path)
+            except manifest.ManifestError as exc:
+                console.print(f"[bold red]Error:[/bold red] {exc}")
                 return False
+            meta = collected.metadata
+            content = ""
+            to_lint = [entry.path for entry in collected.entries if entry.kind == "markdown"]
+        else:
+            meta, content = frontmatter.parse(input_path.read_text(encoding="utf-8"))
+            to_lint = [input_path]
 
-        resolved_template = template or _resolve_template(meta.get("template", DEFAULT_TEMPLATE))
-        if resolved_template is None:
-            console.print(f"[bold red]Error:[/bold red] Unknown template in front matter — {meta.get('template')}")
+        for source in to_lint:
+            issues = lint(source.read_text(encoding="utf-8"))
+            if issues:
+                _print_issues(issues, str(source))
+                console.print()
+                if has_errors(issues):
+                    console.print(
+                        "[bold red]Aborted:[/bold red] fix the errors above, or run [cyan]--dry-run[/cyan] to recheck."
+                    )
+                    return False
+
+        try:
+            chosen = settings.resolve(
+                flags=flags,
+                front_matter=meta,
+                project=project,
+                accent_lookup=_accent_hex,
+                template_lookup=_resolve_template,
+            )
+        except settings.SettingsError as exc:
+            console.print(f"[bold red]Error:[/bold red] {exc}")
             return False
 
-        resolved_accent = accent
-        if resolved_accent is None and meta.get("accent"):
-            resolved_accent = _accent_hex(meta["accent"])
-            if resolved_accent is None:
-                console.print(f"[bold yellow]Warning:[/bold yellow] Ignoring unknown accent — {meta['accent']}")
+        for warning in chosen.warnings:
+            console.print(f"[bold yellow]Warning:[/bold yellow] {warning}")
 
-        resolved_bib = _resolve_bib(bib or meta.get("bib"), cwd)
-        resolved_title = title or meta.get("title") or extract_title(content)
-        resolved_author = author or meta.get("author") or _detect_git_user()
+        resolved_bib = _resolve_bib(chosen.bib, cwd)
+        if resolved_bib is None and collected is not None:
+            resolved_bib = collected.bibliography
+        resolved_title = title or meta.get("title") or extract_title(content) or input_path.stem
+        resolved_author = chosen.author or _detect_git_user()
         resolved_subtitle = subtitle or meta.get("subtitle") or ""
         resolved_date = date or meta.get("date")
+        split_ratio = images.page_ratio(chosen.paper) if chosen.split_tall_images else None
 
         console.print(f"  [dim]Title:[/dim]    [white]{resolved_title}[/white]")
         console.print(f"  [dim]Author:[/dim]   [white]{resolved_author}[/white]")
-        console.print(f"  [dim]Template:[/dim] [white]{_template_label(resolved_template)}[/white]")
+        console.print(
+            f"  [dim]Template:[/dim] [white]{_template_label(chosen.template)}[/white]"
+            f" [dim]on[/dim] [white]{chosen.paper}[/white]"
+        )
         console.print(f"  [dim]Output:[/dim]   [cyan]{output_path}[/cyan]")
         console.print()
 
+        scratch = (
+            Path(tempfile.mkdtemp(prefix="doc-engine-"))
+            if chosen.fetch_images or chosen.split_tall_images
+            else None
+        )
+
         with console.status("[bold blue]Converting Markdown → Typst…[/bold blue]"):
-            conversion = convert_document(strip_first_heading(content), base_dir=input_path.parent)
+            try:
+                if collected is not None:
+                    conversion = manifest.assemble(
+                        collected,
+                        work_dir=scratch,
+                        fetch_remote=chosen.fetch_images,
+                        split_tall=split_ratio,
+                    )
+                else:
+                    conversion = convert_document(
+                        strip_first_heading(content),
+                        base_dir=input_path.parent,
+                        work_dir=scratch,
+                        fetch_remote=chosen.fetch_images,
+                        split_tall=split_ratio,
+                    )
+            except DiagramError as exc:
+                console.print(
+                    f"\n[bold red]Diagram failed:[/bold red] {exc.language} block — {exc.message}"
+                )
+                return False
 
         with console.status("[bold blue]Compiling PDF…[/bold blue]"):
             try:
@@ -272,11 +403,14 @@ def build(
                     date=resolved_date,
                     output_path=str(output_path),
                     bib_file=str(resolved_bib.resolve()) if resolved_bib else None,
-                    template=resolved_template,
-                    accent=resolved_accent,
-                    branding=not no_branding,
+                    template=chosen.template,
+                    accent=chosen.accent,
+                    branding=chosen.branding,
                     version=__version__,
                     assets=conversion.assets,
+                    generated=conversion.generated,
+                    paper=chosen.paper,
+                    pdf_standard=chosen.pdf_standard,
                 )
             except Exception as exc:
                 message = getattr(exc, "message", None) or str(exc)
@@ -284,8 +418,16 @@ def build(
                 for hint in getattr(exc, "hints", []) or []:
                     console.print(f"  [dim]hint: {hint}[/dim]")
                 return False
+            finally:
+                if scratch is not None:
+                    shutil.rmtree(scratch, ignore_errors=True)
 
-        console.print(f"[bold green]✓[/bold green] Generated → [bold cyan]{output_path}[/bold cyan]")
+        for warning in conversion.warnings:
+            console.print(f"[bold yellow]Warning:[/bold yellow] {warning}")
+
+        console.print(
+            f"[bold green]✓[/bold green] Generated → [bold cyan]{output_path}[/bold cyan]"
+        )
         return True
 
     ok = run()
@@ -313,18 +455,38 @@ def _resolve_bib(bib: str | None, cwd: Path) -> Path | None:
 
 
 def _watch(input_path: Path, run) -> None:
-    console.print("\n[dim]Watching for changes — press Ctrl+C to stop.[/dim]")
-    last = _mtime(input_path)
+    watched = _watch_list(input_path)
+    count = len(watched)
+    noun = "file" if count == 1 else "files"
+    console.print(f"\n[dim]Watching {count} {noun} — press Ctrl+C to stop.[/dim]")
+    last = _fingerprint(watched)
     try:
         while True:
             time.sleep(0.5)
-            current = _mtime(input_path)
+            current = _fingerprint(watched)
             if current != last:
                 last = current
                 console.rule(f"[dim]{time.strftime('%H:%M:%S')} — rebuilding[/dim]")
                 run()
+                # A rebuild can change which files the manifest pulls in.
+                watched = _watch_list(input_path)
+                last = _fingerprint(watched)
     except KeyboardInterrupt:
         console.print("\n[dim]Stopped.[/dim]")
+
+
+def _watch_list(input_path: Path) -> list[Path]:
+    """The manifest and everything it pulls in, so editing any part rebuilds."""
+    if not manifest.is_manifest(input_path):
+        return [input_path]
+    try:
+        return [input_path, *manifest.load(input_path).sources]
+    except (manifest.ManifestError, OSError):
+        return [input_path]
+
+
+def _fingerprint(paths: list[Path]) -> tuple[float, ...]:
+    return tuple(_mtime(path) for path in paths)
 
 
 def _mtime(path: Path) -> float:
@@ -334,20 +496,29 @@ def _mtime(path: Path) -> float:
         return 0.0
 
 
-@cli.command()
+@cli.command(cls=RichCommand)
 def info() -> None:
-    """Show version, repository, and available templates."""
-    templates = ", ".join(available_templates())
-    body = (
-        f"[bold white]doc-engine-cli[/bold white] [dim]v{__version__}[/dim]\n"
-        "Zero-config Markdown → PDF documentation engine.\n\n"
-        f"[dim]Repository:[/dim] [cyan]{REPO_URL}[/cyan]\n"
-        f"[dim]Templates:[/dim]  {templates}\n\n"
-        "[dim]Common usage[/dim]\n"
-        "  doc-engine build\n"
-        "  doc-engine build README.md --template modern --accent teal\n"
-        "  doc-engine build --watch\n\n"
-        "[dim]Run[/dim] [cyan]doc-engine --help[/cyan] [dim]for every command and flag.[/dim]"
+    """Show version, repository, and what this build supports."""
+    facts = Table.grid(padding=(0, 2))
+    facts.add_column(style="dim", no_wrap=True, vertical="top")
+    facts.add_column()
+    facts.add_row("Repository", f"[cyan]{REPO_URL}[/cyan]")
+    facts.add_row("Templates", ", ".join(available_templates()))
+    facts.add_row("Page sizes", f"{', '.join(PAPER_SIZES)} [dim](default {DEFAULT_PAPER})[/dim]")
+    facts.add_row("Accents", f"{', '.join(sorted(_NAMED_ACCENTS))} [dim]or any hex[/dim]")
+
+    body = Group(
+        f"[bold white]doc-engine-cli[/bold white] [dim]v{__version__}[/dim]",
+        "Turn Markdown into a polished PDF. No LaTeX, no config.",
+        "",
+        facts,
+        "",
+        "[dim]Markdown support[/dim]",
+        "  tables · task lists · footnotes · local images · bibliography",
+        "  mermaid and svg code blocks rendered as diagrams",
+        "  LaTeX math, inline with $…$ and display with $$…$$",
+        "",
+        "[dim]Run[/dim] [cyan]doc-engine --help[/cyan] [dim]for every command and flag.[/dim]",
     )
     console.print(Panel(body, border_style="blue", padding=(1, 2), title="info"))
 
