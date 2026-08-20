@@ -40,6 +40,7 @@ KNOWN_KEYS = (
     "branding",
     "pdf_standard",
     "fetch_images",
+    "tall_images",
 )
 
 

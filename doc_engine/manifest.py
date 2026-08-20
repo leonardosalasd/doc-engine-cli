@@ -114,7 +114,12 @@ def load(path: Path) -> Manifest:
     return Manifest(metadata=metadata, entries=entries, bibliography=bibliography)
 
 
-def assemble(manifest: Manifest, download_dir: Path | None = None) -> Conversion:
+def assemble(
+    manifest: Manifest,
+    work_dir: Path | None = None,
+    fetch_remote: bool = False,
+    split_tall: float | None = None,
+) -> Conversion:
     """Convert every entry and join the results into one document.
 
     Each entry is converted against its own folder, so a picture referenced from
@@ -133,7 +138,9 @@ def assemble(manifest: Manifest, download_dir: Path | None = None) -> Conversion
                 entry.path.read_text(encoding="utf-8"),
                 base_dir=entry.path.parent,
                 namespace=namespace,
-                download_dir=download_dir,
+                work_dir=work_dir,
+                fetch_remote=fetch_remote,
+                split_tall=split_tall,
             )
             body.append(piece.body)
             assets.update(piece.assets)

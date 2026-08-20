@@ -1,3 +1,3 @@
 """doc-engine-cli: Modern Markdown to Typst compiler."""
 
-__version__ = "1.1.1"
+__version__ = "2.0.0"

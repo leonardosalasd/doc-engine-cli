@@ -12,7 +12,7 @@ from rich.console import Console, Group
 from rich.panel import Panel
 from rich.table import Table
 
-from doc_engine import __version__, config, frontmatter, manifest
+from doc_engine import __version__, config, frontmatter, images, manifest
 from doc_engine.compiler import (
     DEFAULT_PAPER,
     DEFAULT_TEMPLATE,
@@ -207,6 +207,13 @@ def cli(ctx: click.Context) -> None:
     help="Write an archival PDF/A file.",
 )
 @click.option(
+    "--tall-images",
+    "tall_images",
+    default=None,
+    type=click.Choice(("fit", "split"), case_sensitive=False),
+    help="What to do with a picture taller than a page (default: fit).",
+)
+@click.option(
     "--fetch-images",
     "fetch_images",
     is_flag=True,
@@ -240,6 +247,7 @@ def build(
     bib: str | None,
     no_branding: bool,
     pdf_standard: str | None,
+    tall_images: str | None,
     fetch_images: bool,
     dry_run: bool,
     watch: bool,
@@ -356,6 +364,8 @@ def build(
         resolved_standard = pdf_standard or setting("pdf_standard")
         resolved_branding = not no_branding and setting("branding") != "false"
         wants_downloads = fetch_images or setting("fetch_images") == "true"
+        wants_split = (tall_images or setting("tall_images") or "fit").lower() == "split"
+        split_ratio = images.page_ratio(resolved_paper) if wants_split else None
 
         console.print(f"  [dim]Title:[/dim]    [white]{resolved_title}[/white]")
         console.print(f"  [dim]Author:[/dim]   [white]{resolved_author}[/white]")
@@ -366,17 +376,26 @@ def build(
         console.print(f"  [dim]Output:[/dim]   [cyan]{output_path}[/cyan]")
         console.print()
 
-        downloads = Path(tempfile.mkdtemp(prefix="doc-engine-")) if wants_downloads else None
+        scratch = (
+            Path(tempfile.mkdtemp(prefix="doc-engine-")) if wants_downloads or wants_split else None
+        )
 
         with console.status("[bold blue]Converting Markdown → Typst…[/bold blue]"):
             try:
                 if collected is not None:
-                    conversion = manifest.assemble(collected, download_dir=downloads)
+                    conversion = manifest.assemble(
+                        collected,
+                        work_dir=scratch,
+                        fetch_remote=wants_downloads,
+                        split_tall=split_ratio,
+                    )
                 else:
                     conversion = convert_document(
                         strip_first_heading(content),
                         base_dir=input_path.parent,
-                        download_dir=downloads,
+                        work_dir=scratch,
+                        fetch_remote=wants_downloads,
+                        split_tall=split_ratio,
                     )
             except DiagramError as exc:
                 console.print(
@@ -410,8 +429,8 @@ def build(
                     console.print(f"  [dim]hint: {hint}[/dim]")
                 return False
             finally:
-                if downloads is not None:
-                    shutil.rmtree(downloads, ignore_errors=True)
+                if scratch is not None:
+                    shutil.rmtree(scratch, ignore_errors=True)
 
         for warning in conversion.warnings:
             console.print(f"[bold yellow]Warning:[/bold yellow] {warning}")

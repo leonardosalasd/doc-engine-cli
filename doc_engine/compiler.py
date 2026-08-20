@@ -112,14 +112,16 @@ def compile_pdf(
             typst.compile(str(main_file), output=resolved_output)
 
 
-# Pictures keep their natural size unless they are too wide for the text block,
-# in which case they shrink to fit. Forcing every image to full width blows up
-# small diagrams; leaving them unconstrained lets big ones run off the page.
-_FIT_IMAGE = """#let fit-image(path) = context {
+# Pictures keep their natural size unless they do not fit the text block, in
+# which case they shrink until they do. Forcing every image to full width blows
+# up small diagrams, and constraining only the width lets a tall one run past
+# the bottom of the page, where Typst clips whatever does not fit.
+_FIT_IMAGE = """#let fit-image(path) = context layout(area => {
   let img = image(path)
   let natural = measure(img)
-  layout(area => if natural.width > area.width { image(path, width: 100%) } else { img })
-}
+  let scale = calc.min(1.0, area.width / natural.width, area.height / natural.height)
+  if scale >= 1.0 { img } else { image(path, width: natural.width * scale) }
+})
 """
 
 

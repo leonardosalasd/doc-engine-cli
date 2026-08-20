@@ -32,13 +32,17 @@ class TestGating:
         assert "[alt]" in conversion.body
 
     def test_failure_warns_instead_of_raising(self, tmp_path) -> None:
-        conversion = convert_document("![alt](ftp://x.test/a.png)", download_dir=tmp_path)
+        conversion = convert_document(
+            "![alt](ftp://x.test/a.png)", work_dir=tmp_path, fetch_remote=True
+        )
         assert conversion.assets == {}
         assert len(conversion.warnings) == 1
         assert "could not fetch" in conversion.warnings[0]
 
     def test_data_uris_are_left_alone(self, tmp_path) -> None:
-        conversion = convert_document("![alt](data:image/png;base64,AAAA)", download_dir=tmp_path)
+        conversion = convert_document(
+            "![alt](data:image/png;base64,AAAA)", work_dir=tmp_path, fetch_remote=True
+        )
         assert conversion.assets == {}
         assert conversion.warnings == []
 

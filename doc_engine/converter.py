@@ -17,7 +17,7 @@ from typing import Any
 
 import mistune
 
-from doc_engine import diagrams, latex, remote
+from doc_engine import diagrams, images, latex, remote
 
 _TYPST_ESCAPES = {
     "\\": "\\\\",
@@ -107,13 +107,17 @@ class TypstRenderer(mistune.BaseRenderer):
         self,
         base_dir: Path | None = None,
         namespace: str = "",
-        download_dir: Path | None = None,
+        work_dir: Path | None = None,
+        fetch_remote: bool = False,
+        split_tall: float | None = None,
     ) -> None:
         super().__init__()
         self._ordered_stack: list[bool] = []
         self._base_dir = base_dir
         self._namespace = namespace
-        self._download_dir = download_dir
+        self._work_dir = work_dir
+        self._fetch_remote = fetch_remote
+        self._split_tall = split_tall
         self.warnings: list[str] = []
         self._footnotes: dict[str, str] = {}
         self._asset_names: dict[str, str] = {}
@@ -144,7 +148,36 @@ class TypstRenderer(mistune.BaseRenderer):
         asset = self._register_image(url)
         if asset is None:
             return f"[{alt}]" if alt else ""
-        return f'#fit-image("{asset}")'
+        return self._place(asset)
+
+    def _place(self, asset: str) -> str:
+        """Emit a picture, cut across pages when it is too tall for one."""
+        if self._split_tall is None:
+            return f'#fit-image("{asset}")'
+        pieces = self._cut(asset)
+        if len(pieces) == 1:
+            return f'#fit-image("{pieces[0]}")'
+        return "\n#pagebreak(weak: true)\n".join(f'#fit-image("{p}")' for p in pieces)
+
+    def _cut(self, asset: str) -> list[str]:
+        source = Path(self.assets.get(asset, ""))
+        if not source.is_file() or self._work_dir is None:
+            return [asset]
+        try:
+            written = images.split(source, self._work_dir, self._split_tall, Path(asset).stem)
+        except images.SplitError as exc:
+            self.warnings.append(str(exc))
+            return [asset]
+        if len(written) == 1:
+            return [asset]
+
+        names = []
+        for index, piece in enumerate(written):
+            name = f"assets/{self._namespace}{Path(asset).stem}_part{index}.png"
+            self.assets[name] = str(piece)
+            names.append(name)
+        del self.assets[asset]
+        return names
 
     def linebreak(self, token: dict, state: Any) -> str:
         return "\\\n"
@@ -325,12 +358,12 @@ class TypstRenderer(mistune.BaseRenderer):
 
     def _download(self, url: str) -> str | None:
         """Fetch a linked image, when the build asked for that."""
-        if self._download_dir is None:
+        if not self._fetch_remote or self._work_dir is None:
             return None
         if url in self._asset_names:
             return self._asset_names[url]
         try:
-            downloaded = remote.fetch(url, self._download_dir)
+            downloaded = remote.fetch(url, self._work_dir)
         except remote.DownloadError as exc:
             self.warnings.append(f"could not fetch {url} — {exc}")
             return None
@@ -347,15 +380,25 @@ def convert_document(
     markdown: str,
     base_dir: Path | None = None,
     namespace: str = "",
-    download_dir: Path | None = None,
+    work_dir: Path | None = None,
+    fetch_remote: bool = False,
+    split_tall: float | None = None,
 ) -> Conversion:
     """Convert Markdown to Typst.
 
     *namespace* prefixes the names of assets and rendered diagrams, so several
     documents assembled into one PDF cannot overwrite each other's files.
-    *download_dir* enables fetching linked images, which is otherwise skipped.
+    *work_dir* is scratch space for anything written during conversion.
+    *fetch_remote* allows downloading linked images, and *split_tall* is the
+    page proportion above which a picture is cut across pages.
     """
-    renderer = TypstRenderer(base_dir=base_dir, namespace=namespace, download_dir=download_dir)
+    renderer = TypstRenderer(
+        base_dir=base_dir,
+        namespace=namespace,
+        work_dir=work_dir,
+        fetch_remote=fetch_remote,
+        split_tall=split_tall,
+    )
     md = mistune.create_markdown(renderer=None, plugins=[*_PLUGINS, _math_plugin])
     tokens, state = md.parse(markdown)
     renderer.load_footnotes(tokens, state)
