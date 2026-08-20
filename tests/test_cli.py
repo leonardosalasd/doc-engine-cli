@@ -2,7 +2,7 @@ from click.testing import CliRunner
 
 from doc_engine import __version__
 from doc_engine.cli import _unique_path, cli
-from doc_engine.compiler import DEFAULT_PAPER, _build_main, available_templates
+from doc_engine.compiler import _build_main, available_templates
 
 
 class TestTemplates:
