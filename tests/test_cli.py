@@ -1,7 +1,7 @@
 from click.testing import CliRunner
 
 from doc_engine import __version__
-from doc_engine.cli import _resolve_paper, _unique_path, cli
+from doc_engine.cli import _unique_path, cli
 from doc_engine.compiler import DEFAULT_PAPER, _build_main, available_templates
 
 
@@ -47,18 +47,6 @@ class TestTemplates:
 
 
 class TestPaper:
-    def test_defaults_to_a4(self) -> None:
-        assert _resolve_paper(None, None) == DEFAULT_PAPER == "a4"
-
-    def test_flag_wins_over_front_matter(self) -> None:
-        assert _resolve_paper("us-letter", "a5") == "us-letter"
-
-    def test_front_matter_is_used_when_no_flag(self) -> None:
-        assert _resolve_paper(None, "A5") == "a5"
-
-    def test_unknown_front_matter_size_is_rejected(self) -> None:
-        assert _resolve_paper(None, "tabloid-xl") is None
-
     def test_build_main_injects_paper(self) -> None:
         main = _build_main("body", "T", "Me", "none", "none", True, "2.0.0", "", None, "a5")
         assert 'paper: "a5"' in main

@@ -12,10 +12,9 @@ from rich.console import Console, Group
 from rich.panel import Panel
 from rich.table import Table
 
-from doc_engine import __version__, config, frontmatter, images, manifest
+from doc_engine import __version__, config, frontmatter, images, manifest, settings
 from doc_engine.compiler import (
     DEFAULT_PAPER,
-    DEFAULT_TEMPLATE,
     PAPER_SIZES,
     PDF_STANDARDS,
     available_templates,
@@ -123,16 +122,6 @@ def _template_callback(ctx: click.Context, param: click.Parameter, value: str | 
         choices = ", ".join(available_templates())
         raise click.BadParameter(f"pick one of ({choices}) or a path to a .typ file.")
     return resolved
-
-
-def _resolve_paper(flag: str | None, from_meta: str | None) -> str | None:
-    """Return the page size to use, or None when the front matter names an unknown one."""
-    if flag:
-        return flag.lower()
-    if from_meta:
-        key = from_meta.strip().lower()
-        return key if key in PAPER_SIZES else None
-    return DEFAULT_PAPER
 
 
 def _template_label(template: str) -> str:
@@ -266,11 +255,11 @@ def build(
     cwd = Path.cwd()
 
     try:
-        settings = config.load(cwd)
+        project = config.load(cwd)
     except config.ConfigError as exc:
         console.print(f"[bold red]Error:[/bold red] {exc}")
         raise SystemExit(1) from exc
-    if settings:
+    if project:
         console.print(f"  [dim]Settings:[/dim] [cyan]{config.CONFIG_NAME}[/cyan]")
 
     if input_file:
@@ -299,6 +288,18 @@ def build(
             raise SystemExit(1 if errors else 0)
         console.print("[bold green]✓[/bold green] No issues found.")
         return
+
+    flags = {
+        "template": template,
+        "paper": paper,
+        "accent": accent,
+        "author": author,
+        "bib": bib,
+        "pdf_standard": pdf_standard,
+        "no_branding": no_branding,
+        "fetch_images": fetch_images,
+        "tall_images": tall_images,
+    }
 
     output_path = Path(output) if output else Path(f"{input_path.stem}_doc.pdf")
     if not force:
@@ -330,54 +331,43 @@ def build(
                     )
                     return False
 
-        def setting(name: str) -> str | None:
-            """Front matter first, then the project file."""
-            return meta.get(name) or settings.get(name)
-
-        wanted_template = setting("template") or DEFAULT_TEMPLATE
-        resolved_template = template or _resolve_template(wanted_template)
-        if resolved_template is None:
-            console.print(f"[bold red]Error:[/bold red] Unknown template — {wanted_template}")
+        try:
+            chosen = settings.resolve(
+                flags=flags,
+                front_matter=meta,
+                project=project,
+                accent_lookup=_accent_hex,
+                template_lookup=_resolve_template,
+            )
+        except settings.SettingsError as exc:
+            console.print(f"[bold red]Error:[/bold red] {exc}")
             return False
 
-        resolved_accent = accent
-        if resolved_accent is None and setting("accent"):
-            wanted_accent = setting("accent")
-            resolved_accent = _accent_hex(wanted_accent)
-            if resolved_accent is None:
-                console.print(
-                    f"[bold yellow]Warning:[/bold yellow] Ignoring unknown accent — {wanted_accent}"
-                )
+        for warning in chosen.warnings:
+            console.print(f"[bold yellow]Warning:[/bold yellow] {warning}")
 
-        resolved_bib = _resolve_bib(bib or setting("bib"), cwd)
+        resolved_bib = _resolve_bib(chosen.bib, cwd)
         if resolved_bib is None and collected is not None:
             resolved_bib = collected.bibliography
         resolved_title = title or meta.get("title") or extract_title(content) or input_path.stem
-        resolved_author = author or setting("author") or _detect_git_user()
+        resolved_author = chosen.author or _detect_git_user()
         resolved_subtitle = subtitle or meta.get("subtitle") or ""
         resolved_date = date or meta.get("date")
-        resolved_paper = _resolve_paper(paper, setting("paper"))
-        if resolved_paper is None:
-            console.print(f"[bold red]Error:[/bold red] Unknown paper size — {setting('paper')}")
-            return False
-
-        resolved_standard = pdf_standard or setting("pdf_standard")
-        resolved_branding = not no_branding and setting("branding") != "false"
-        wants_downloads = fetch_images or setting("fetch_images") == "true"
-        wants_split = (tall_images or setting("tall_images") or "fit").lower() == "split"
-        split_ratio = images.page_ratio(resolved_paper) if wants_split else None
+        split_ratio = images.page_ratio(chosen.paper) if chosen.split_tall_images else None
 
         console.print(f"  [dim]Title:[/dim]    [white]{resolved_title}[/white]")
         console.print(f"  [dim]Author:[/dim]   [white]{resolved_author}[/white]")
         console.print(
-            f"  [dim]Template:[/dim] [white]{_template_label(resolved_template)}[/white]"
-            f" [dim]on[/dim] [white]{resolved_paper}[/white]"
+            f"  [dim]Template:[/dim] [white]{_template_label(chosen.template)}[/white]"
+            f" [dim]on[/dim] [white]{chosen.paper}[/white]"
         )
         console.print(f"  [dim]Output:[/dim]   [cyan]{output_path}[/cyan]")
         console.print()
 
         scratch = (
-            Path(tempfile.mkdtemp(prefix="doc-engine-")) if wants_downloads or wants_split else None
+            Path(tempfile.mkdtemp(prefix="doc-engine-"))
+            if chosen.fetch_images or chosen.split_tall_images
+            else None
         )
 
         with console.status("[bold blue]Converting Markdown → Typst…[/bold blue]"):
@@ -386,7 +376,7 @@ def build(
                     conversion = manifest.assemble(
                         collected,
                         work_dir=scratch,
-                        fetch_remote=wants_downloads,
+                        fetch_remote=chosen.fetch_images,
                         split_tall=split_ratio,
                     )
                 else:
@@ -394,7 +384,7 @@ def build(
                         strip_first_heading(content),
                         base_dir=input_path.parent,
                         work_dir=scratch,
-                        fetch_remote=wants_downloads,
+                        fetch_remote=chosen.fetch_images,
                         split_tall=split_ratio,
                     )
             except DiagramError as exc:
@@ -413,14 +403,14 @@ def build(
                     date=resolved_date,
                     output_path=str(output_path),
                     bib_file=str(resolved_bib.resolve()) if resolved_bib else None,
-                    template=resolved_template,
-                    accent=resolved_accent,
-                    branding=resolved_branding,
+                    template=chosen.template,
+                    accent=chosen.accent,
+                    branding=chosen.branding,
                     version=__version__,
                     assets=conversion.assets,
                     generated=conversion.generated,
-                    paper=resolved_paper,
-                    pdf_standard=resolved_standard,
+                    paper=chosen.paper,
+                    pdf_standard=chosen.pdf_standard,
                 )
             except Exception as exc:
                 message = getattr(exc, "message", None) or str(exc)
