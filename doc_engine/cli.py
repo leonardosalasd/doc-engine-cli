@@ -18,6 +18,7 @@ from doc_engine.compiler import (
     PAPER_SIZES,
     PDF_STANDARDS,
     available_templates,
+    available_themes,
     compile_pdf,
 )
 from doc_engine.converter import convert_document, extract_title, strip_first_heading
@@ -196,6 +197,12 @@ def cli(ctx: click.Context) -> None:
     help="Write an archival PDF/A file.",
 )
 @click.option(
+    "--code-theme",
+    "code_theme",
+    default=None,
+    help="Syntax highlighting theme: a bundled name or a path to a .tmTheme file.",
+)
+@click.option(
     "--tall-images",
     "tall_images",
     default=None,
@@ -236,6 +243,7 @@ def build(
     bib: str | None,
     no_branding: bool,
     pdf_standard: str | None,
+    code_theme: str | None,
     tall_images: str | None,
     fetch_images: bool,
     dry_run: bool,
@@ -298,6 +306,7 @@ def build(
         "pdf_standard": pdf_standard,
         "no_branding": no_branding,
         "fetch_images": fetch_images,
+        "code_theme": code_theme,
         "tall_images": tall_images,
     }
 
@@ -411,6 +420,7 @@ def build(
                     generated=conversion.generated,
                     paper=chosen.paper,
                     pdf_standard=chosen.pdf_standard,
+                    code_theme=chosen.code_theme,
                 )
             except Exception as exc:
                 message = getattr(exc, "message", None) or str(exc)
@@ -505,6 +515,7 @@ def info() -> None:
     facts.add_row("Repository", f"[cyan]{REPO_URL}[/cyan]")
     facts.add_row("Templates", ", ".join(available_templates()))
     facts.add_row("Page sizes", f"{', '.join(PAPER_SIZES)} [dim](default {DEFAULT_PAPER})[/dim]")
+    facts.add_row("Code themes", ", ".join(available_themes()))
     facts.add_row("Accents", f"{', '.join(sorted(_NAMED_ACCENTS))} [dim]or any hex[/dim]")
 
     body = Group(

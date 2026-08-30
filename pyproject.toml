@@ -55,7 +55,7 @@ doc-engine = "doc_engine.cli:main"
 include = ["doc_engine*"]
 
 [tool.setuptools.package-data]
-doc_engine = ["templates/*.typ"]
+doc_engine = ["templates/*.typ", "themes/*.tmTheme"]
 
 [tool.ruff]
 line-length = 100

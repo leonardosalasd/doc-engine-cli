@@ -41,6 +41,7 @@ KNOWN_KEYS = (
     "pdf_standard",
     "fetch_images",
     "tall_images",
+    "code_theme",
 )
 
 

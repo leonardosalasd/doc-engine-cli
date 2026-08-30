@@ -124,6 +124,7 @@ class TypstRenderer(mistune.BaseRenderer):
         work_dir: Path | None = None,
         fetch_remote: bool = False,
         split_tall: float | None = None,
+        anchors: dict[Path, str] | None = None,
     ) -> None:
         super().__init__()
         self._ordered_stack: list[bool] = []
@@ -132,6 +133,9 @@ class TypstRenderer(mistune.BaseRenderer):
         self._work_dir = work_dir
         self._fetch_remote = fetch_remote
         self._split_tall = split_tall
+        # Resolved paths of the other documents in this build, mapped to the
+        # anchor each one carries, so links between them can jump internally.
+        self._anchors = {Path(k).resolve(): v for k, v in (anchors or {}).items()}
         self.warnings: list[str] = []
         self._footnotes: dict[str, str] = {}
         self._asset_names: dict[str, str] = {}
@@ -155,7 +159,28 @@ class TypstRenderer(mistune.BaseRenderer):
     def link(self, token: dict, state: Any) -> str:
         children = _render_children(self, token, state)
         url = token["attrs"]["url"]
+        anchor = self._anchor_for(url)
+        if anchor:
+            return f"#link(<{anchor}>)[{children}]"
         return f'#link("{url}")[{children}]'
+
+    def _anchor_for(self, url: str) -> str | None:
+        """An anchor when this link points at another file in the same build.
+
+        Linking to a sibling document is normal in a folder of Markdown, but the
+        reader of the PDF has no such file, so the link jumps within the document
+        instead.
+        """
+        if not self._anchors or self._base_dir is None or _REMOTE.match(url):
+            return None
+        target = url.split("#", 1)[0]
+        if not target:
+            return None
+        try:
+            resolved = (self._base_dir / target).resolve()
+        except OSError:
+            return None
+        return self._anchors.get(resolved)
 
     def image(self, token: dict, state: Any) -> str:
         url = token.get("attrs", {}).get("url", "")
@@ -425,6 +450,7 @@ def convert_document(
     work_dir: Path | None = None,
     fetch_remote: bool = False,
     split_tall: float | None = None,
+    anchors: dict[Path, str] | None = None,
 ) -> Conversion:
     """Convert Markdown to Typst.
 
@@ -440,6 +466,7 @@ def convert_document(
         work_dir=work_dir,
         fetch_remote=fetch_remote,
         split_tall=split_tall,
+        anchors=anchors,
     )
     md = mistune.create_markdown(renderer=None, plugins=[*_PLUGINS, _math_plugin])
     tokens, state = md.parse(markdown)
