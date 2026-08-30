@@ -28,10 +28,15 @@ class Resolved:
     author: str | None
     bib: str | None
     pdf_standard: str | None
+    code_theme: str | None
     branding: bool
     fetch_images: bool
     split_tall_images: bool
     warnings: tuple[str, ...] = ()
+
+
+def _text(value: object) -> str | None:
+    return str(value) if value else None
 
 
 def resolve(
@@ -85,6 +90,7 @@ def resolve(
         author=flag("author") or setting("author"),
         bib=flag("bib") or setting("bib"),
         pdf_standard=str(standard) if standard else None,
+        code_theme=_text(flag("code_theme") or setting("code_theme")),
         branding=not flag("no_branding") and setting("branding") != "false",
         fetch_images=bool(flag("fetch_images")) or setting("fetch_images") == "true",
         split_tall_images=(

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from click.testing import CliRunner
 
 from doc_engine import __version__
@@ -156,3 +158,82 @@ class TestHelp:
         flat = " ".join(result.output.split())
         assert "mermaid" in flat
         assert "math" in flat.lower()
+
+
+class TestCodeThemes:
+    def test_ships_expected_themes(self) -> None:
+        from doc_engine.compiler import available_themes
+
+        for expected in ("github", "monochrome", "solarized"):
+            assert expected in available_themes()
+
+    def test_bundled_name_resolves_to_a_file(self) -> None:
+        from doc_engine.compiler import available_themes, theme_path
+
+        for name in available_themes():
+            assert theme_path(name).is_file()
+
+    def test_a_path_is_taken_as_given(self) -> None:
+        from doc_engine.compiler import theme_path
+
+        assert theme_path("/tmp/mine.tmTheme") == Path("/tmp/mine.tmTheme")
+
+    def test_theme_is_injected_when_asked(self) -> None:
+        main = _build_main(
+            "body", "T", "Me", "none", "none", True, "2.0.0", "", None, "a4", '"github.tmTheme"'
+        )
+        assert 'set raw(theme: "github.tmTheme")' in main
+
+    def test_no_theme_leaves_highlighting_alone(self) -> None:
+        assert "set raw" not in _build_main("body", "T", "Me", "none", "none", True, "2.0.0")
+
+
+class TestOpening:
+    """--open hands the file to the platform's viewer."""
+
+    def test_uses_the_right_command_per_platform(self, monkeypatch) -> None:
+        from doc_engine import cli as cli_module
+
+        calls: list[list[str]] = []
+        monkeypatch.setattr(cli_module.subprocess, "run", lambda cmd, **kw: calls.append(cmd))
+
+        for platform, expected in (("darwin", "open"), ("linux", "xdg-open")):
+            calls.clear()
+            monkeypatch.setattr(cli_module.sys, "platform", platform)
+            cli_module._open_file("out.pdf")
+            assert calls == [[expected, "out.pdf"]]
+
+    def test_windows_uses_startfile(self, monkeypatch) -> None:
+        from doc_engine import cli as cli_module
+
+        opened: list[str] = []
+        monkeypatch.setattr(cli_module.sys, "platform", "win32")
+        monkeypatch.setattr(cli_module.os, "startfile", opened.append, raising=False)
+        cli_module._open_file("out.pdf")
+        assert opened == ["out.pdf"]
+
+
+class TestInfoJson:
+    """Machine-readable output, so a tool driving the CLI need not hardcode lists."""
+
+    def load(self):
+        import json
+
+        result = CliRunner().invoke(cli, ["info", "--json"])
+        assert result.exit_code == 0
+        return json.loads(result.output)
+
+    def test_output_is_valid_json(self) -> None:
+        assert self.load()["version"] == __version__
+
+    def test_it_lists_what_the_build_supports(self) -> None:
+        data = self.load()
+        assert data["templates"] == available_templates()
+        assert "github" in data["themes"]
+        assert data["default_paper"] in data["papers"]
+        assert "teal" in data["accents"]
+        assert data["tall_image_modes"] == ["fit", "split"]
+
+    def test_plain_info_is_still_human_readable(self) -> None:
+        result = CliRunner().invoke(cli, ["info"])
+        assert "{" not in result.output.split("Markdown support")[0]

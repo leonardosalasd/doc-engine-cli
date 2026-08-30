@@ -49,6 +49,20 @@ _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 # Pandoc-style [@key] survives escaping as \[\@key\]; restore it as a Typst @key.
 _CITATION = re.compile(r"\\\[\\@([a-zA-Z0-9_\-]+)\\\]")
 
+# GitHub renders a blockquote opening with [!NOTE] and friends as a coloured
+# callout. The marker reaches this point already escaped, since it is ordinary
+# text as far as the parser is concerned.
+_ALERT = re.compile(r"^\\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\\]\s*", re.IGNORECASE)
+
+# Label and colour for each kind, following what GitHub uses.
+_ALERT_STYLES = {
+    "NOTE": ("Note", "#0969da"),
+    "TIP": ("Tip", "#1a7f37"),
+    "IMPORTANT": ("Important", "#8250df"),
+    "WARNING": ("Warning", "#9a6700"),
+    "CAUTION": ("Caution", "#cf222e"),
+}
+
 _UNCHECKED = (
     "#box(width: 0.85em, height: 0.85em, radius: 2pt, "
     'stroke: 1pt + rgb("#94a3b8"), baseline: 0.15em)'
@@ -110,6 +124,7 @@ class TypstRenderer(mistune.BaseRenderer):
         work_dir: Path | None = None,
         fetch_remote: bool = False,
         split_tall: float | None = None,
+        anchors: dict[Path, str] | None = None,
     ) -> None:
         super().__init__()
         self._ordered_stack: list[bool] = []
@@ -118,6 +133,9 @@ class TypstRenderer(mistune.BaseRenderer):
         self._work_dir = work_dir
         self._fetch_remote = fetch_remote
         self._split_tall = split_tall
+        # Resolved paths of the other documents in this build, mapped to the
+        # anchor each one carries, so links between them can jump internally.
+        self._anchors = {Path(k).resolve(): v for k, v in (anchors or {}).items()}
         self.warnings: list[str] = []
         self._footnotes: dict[str, str] = {}
         self._asset_names: dict[str, str] = {}
@@ -141,7 +159,28 @@ class TypstRenderer(mistune.BaseRenderer):
     def link(self, token: dict, state: Any) -> str:
         children = _render_children(self, token, state)
         url = token["attrs"]["url"]
+        anchor = self._anchor_for(url)
+        if anchor:
+            return f"#link(<{anchor}>)[{children}]"
         return f'#link("{url}")[{children}]'
+
+    def _anchor_for(self, url: str) -> str | None:
+        """An anchor when this link points at another file in the same build.
+
+        Linking to a sibling document is normal in a folder of Markdown, but the
+        reader of the PDF has no such file, so the link jumps within the document
+        instead.
+        """
+        if not self._anchors or self._base_dir is None or _REMOTE.match(url):
+            return None
+        target = url.split("#", 1)[0]
+        if not target:
+            return None
+        try:
+            resolved = (self._base_dir / target).resolve()
+        except OSError:
+            return None
+        return self._anchors.get(resolved)
 
     def image(self, token: dict, state: Any) -> str:
         url = token.get("attrs", {}).get("url", "")
@@ -244,13 +283,33 @@ class TypstRenderer(mistune.BaseRenderer):
 
     def block_quote(self, token: dict, state: Any) -> str:
         content = _render_children(self, token, state).strip()
+        alert = _ALERT.match(content)
+        if alert:
+            return self._alert(alert.group(1).upper(), content[alert.end() :].strip())
         return (
             "#block(\n"
-            "  inset: (left: 1.2em, y: 0.6em),\n"
-            '  stroke: (left: 2.5pt + rgb("#4a90d9")),\n'
+            "  width: 100%,\n"
+            "  inset: (left: 1em, rest: 0.8em),\n"
+            '  stroke: (left: 3pt + rgb("#4a90d9")),\n'
             '  fill: rgb("#f0f4f8"),\n'
-            "  radius: 2pt,\n"
+            "  radius: (right: 3pt),\n"
             f")[{content}]\n\n"
+        )
+
+    def _alert(self, kind: str, body: str) -> str:
+        label, color = _ALERT_STYLES[kind]
+        return (
+            "#block(\n"
+            "  width: 100%,\n"
+            "  inset: (left: 1em, rest: 0.8em),\n"
+            f'  stroke: (left: 3pt + rgb("{color}")),\n'
+            f'  fill: rgb("{color}").lighten(92%),\n'
+            "  radius: (right: 3pt),\n"
+            ")[\n"
+            f'  #text(weight: 700, fill: rgb("{color}"))[{label}]\n'
+            "  #v(0.35em, weak: true)\n"
+            f"  {body}\n"
+            "]\n\n"
         )
 
     def list(self, token: dict, state: Any) -> str:
@@ -391,6 +450,7 @@ def convert_document(
     work_dir: Path | None = None,
     fetch_remote: bool = False,
     split_tall: float | None = None,
+    anchors: dict[Path, str] | None = None,
 ) -> Conversion:
     """Convert Markdown to Typst.
 
@@ -406,6 +466,7 @@ def convert_document(
         work_dir=work_dir,
         fetch_remote=fetch_remote,
         split_tall=split_tall,
+        anchors=anchors,
     )
     md = mistune.create_markdown(renderer=None, plugins=[*_PLUGINS, _math_plugin])
     tokens, state = md.parse(markdown)

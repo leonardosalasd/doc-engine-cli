@@ -10,6 +10,7 @@
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/doc-engine-cli?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/doc-engine-cli)
 [![Typst](https://img.shields.io/badge/Powered_by-Typst-239DAD.svg?logo=typst&logoColor=white)](https://typst.app/)
 [![Tests](https://github.com/leonardosalasd/doc-engine-cli/actions/workflows/tests.yml/badge.svg)](https://github.com/leonardosalasd/doc-engine-cli/actions/workflows/tests.yml)
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-EA4AAA.svg?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/leonardosalasd)
 
 Transform any `README.md` into a premium, print-ready PDF report — no configuration, no templates, no LaTeX.
 
@@ -21,33 +22,17 @@ Transform any `README.md` into a premium, print-ready PDF report — no configur
 pipx install doc-engine-cli
 ```
 
+<br>
+
+<a href="https://github.com/sponsors/leonardosalasd">
+  <img src="https://img.shields.io/badge/Sponsor%20this%20project-%E2%9D%A4-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor doc-engine-cli on GitHub Sponsors" height="34"/>
+</a>
+
+<sub>Built and maintained by one person, in the open. Sponsorship keeps it that way.</sub>
+
 ---
 
 </div>
-
-> [!NOTE]
-> ### v2.0.0 is finished and looking for testers
->
-> All of v2.0.0 is written and merged here — diagrams, math, multi-file
-> documents, seven layouts, page sizes, and the rest. It is **not on PyPI yet**,
-> because I would rather find the rough edges before publishing than after.
-> `pipx install doc-engine-cli` still gives you the stable **1.1.1**.
->
-> **Try it and help me break it:**
->
-> ```bash
-> git clone https://github.com/leonardosalasd/doc-engine-cli.git
-> cd doc-engine-cli
-> pip install -e .
-> doc-engine build
-> ```
->
-> Everything in this README describes v2.0.0 and works on that checkout. If
-> something misbehaves, an [issue](https://github.com/leonardosalasd/doc-engine-cli/issues/new)
-> or a note in [Discussions](https://github.com/leonardosalasd/doc-engine-cli/discussions)
-> is genuinely useful — that feedback is what decides when this ships.
->
-> The release follows once it has been through real documents on real machines.
 
 ## Overview
 
@@ -72,6 +57,7 @@ That's it. Zero configuration required.
 | **Front Matter** | An optional `---` metadata block sets the title, subtitle, author, template, and accent right inside the file. |
 | **Watch Mode** | `--watch` rebuilds the PDF every time you save the source. |
 | **Diagrams** | ` ```mermaid ` and ` ```svg ` blocks are rendered as real diagrams, in pure Python — no Node, no headless browser. |
+| **Alerts** | `> [!NOTE]` and friends render as coloured callouts, the way GitHub shows them. |
 | **Math** | LaTeX math, inline with `$…$` and display with `$$…$$`, translated into native Typst math. |
 | **Multi-File** | A `doc-engine.md` manifest builds one PDF from many files, diagrams, figures, and a bibliography. |
 | **Page Sizes** | A4 by default, plus A3–A6, ISO/JIS B5, and US letter, legal, and tabloid. |
@@ -145,7 +131,8 @@ doc-engine build path/to/file.md -o output.pdf -t "Custom Title" -a "Author Name
 
 ```
 doc-engine build [INPUT_FILE]   Convert a Markdown file into a PDF
-doc-engine info                 Show version, repository, and templates
+doc-engine info                 Show version, repository, and what is supported
+doc-engine info --json          The same, as JSON, for tools that drive the CLI
 doc-engine --version            Print the version and exit
 doc-engine --help               Show all commands and flags
 ```
@@ -165,6 +152,7 @@ doc-engine --help               Show all commands and flags
 | `--paper` | `a4` | Page size: `a3`–`a6`, `iso-b5`, `jis-b5`, `us-letter`, `us-legal`, `us-tabloid`. |
 | `--bib` | auto-detect `refs.bib` | Path to a custom `.bib` file for the bibliography. |
 | `--pdf-standard` | off | Write an archival PDF/A file: `a-2b` or `a-3b`. |
+| `--code-theme` | Typst default | Syntax highlighting theme: `github`, `solarized`, `monochrome`, or a path to a `.tmTheme`. |
 | `--tall-images` | `fit` | What to do with a picture taller than a page: `fit` scales it onto one page, `split` cuts it across several. |
 | `--fetch-images` | off | Download images linked by URL instead of rendering their alt text. |
 | `--no-branding` | off | Hide the `doc-engine` attribution from the PDF. |
@@ -258,9 +246,9 @@ Pass `--watch` to keep `doc-engine` running and rebuild the PDF whenever you sav
 the source. It's the fastest way to tweak a template or accent and see the result:
 
 <div align="center">
-<img src="assets/features-v1.1.gif" alt="doc-engine watch mode rebuilding on save" width="800"/>
+<img src="assets/features-watch.gif" alt="doc-engine watch mode rebuilding on save" width="800"/>
 <br>
-<em>Metadata read from front matter, rebuilt live on every save.</em>
+<em>Every file the manifest names is watched, and a save rebuilds the whole document.</em>
 </div>
 
 ```bash
@@ -312,6 +300,65 @@ of the time.
 
 A `$` that is not math stays untouched, so prices and shell variables survive:
 `$10`, `$HOME`, and `export $PATH` all render as written.
+
+---
+
+## Alerts
+
+A blockquote that opens with a marker becomes a coloured callout, matching what
+GitHub shows on the page:
+
+```markdown
+> [!NOTE]
+> Useful information worth knowing.
+
+> [!WARNING]
+> Something that needs attention.
+```
+
+`NOTE`, `TIP`, `IMPORTANT`, `WARNING`, and `CAUTION` are all recognized. A
+blockquote without a marker stays an ordinary quote.
+
+---
+
+## Code Themes
+
+Code blocks are highlighted with Typst's own colours by default. `--code-theme`
+swaps that for something else:
+
+```bash
+doc-engine build --code-theme github
+doc-engine build --code-theme monochrome     # for printing in black and white
+```
+
+| Theme | Look |
+|---|---|
+| `github` | GitHub's light palette |
+| `solarized` | Solarized light |
+| `monochrome` | Greys only — keeps code legible on a black-and-white printer |
+
+Any TextMate `.tmTheme` file works too, so a theme from your editor can be
+pointed at directly:
+
+```bash
+doc-engine build --code-theme ~/themes/my-editor.tmTheme
+```
+
+---
+
+## Cross-References
+
+Inside a manifest build, a link from one included file to another becomes a jump
+within the PDF rather than a link to a file the reader does not have:
+
+```markdown
+For the full picture see [the data model](model.md).
+```
+
+That resolves to the place where `model.md` was merged in. Links to anything
+outside the build — a URL, a file that is not part of the manifest — are left
+exactly as they are.
+
 
 ---
 
@@ -375,6 +422,24 @@ paper = "us-letter"
 
 A `[tool.doc-engine]` table in `pyproject.toml` works the same way. Precedence
 runs command-line flag, then front matter, then this file.
+
+Every key it understands:
+
+| Key | Values |
+|---|---|
+| `template` | A built-in layout name, or a path to a `.typ` file |
+| `paper` | `a3`–`a6`, `iso-b5`, `jis-b5`, `us-letter`, `us-legal`, `us-tabloid` |
+| `accent` | A hex value or a colour name |
+| `author` | Author name, used instead of the Git user |
+| `bib` | Path to a `.bib` file |
+| `branding` | `false` hides the `doc-engine` attribution |
+| `code_theme` | `github`, `solarized`, `monochrome`, or a path to a `.tmTheme` |
+| `pdf_standard` | `a-2b` or `a-3b` |
+| `tall_images` | `fit` or `split` |
+| `fetch_images` | `true` downloads images linked by URL |
+
+Anything else in the table is ignored, so a typo cannot quietly change how a
+document is built.
 
 ---
 
@@ -562,6 +627,7 @@ doc-engine-cli/
 │   ├── cli.py               # Click-based CLI + Git detection
 │   ├── help.py              # Rich help screens
 │   ├── config.py            # .doc-engine.toml project settings
+│   ├── settings.py          # flag / front matter / project precedence
 │   ├── frontmatter.py       # Leading --- metadata block
 │   ├── manifest.py          # doc-engine.md multi-file builds
 │   ├── converter.py         # Markdown → Typst transpiler
@@ -579,6 +645,10 @@ doc-engine-cli/
 │       ├── minimal.typ      # Compact, no cover page
 │       ├── technical.typ    # Accent banner + section markers
 │       └── book.typ         # Centered title page, chapter breaks
+│   └── themes/
+│       ├── github.tmTheme    # Syntax highlighting themes
+│       ├── solarized.tmTheme
+│       └── monochrome.tmTheme
 ├── tests/                    # 181 tests across every module
 ├── pyproject.toml            # Package configuration + dependencies
 ├── LICENSE                   # MIT License
@@ -664,6 +734,7 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build
 - [x] Local images, and remote ones with `--fetch-images`
 - [x] Math blocks (LaTeX `$…$` and `$$…$$`)
 - [x] Mermaid and SVG diagram blocks
+- [x] GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`)
 
 ---
 
@@ -683,8 +754,30 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build
 - [x] PDF/A compliance for archival
 - [x] Page size selection
 - [x] Project-level configuration file
-- [ ] Syntax highlighting themes for code blocks
-- [ ] Cross-references between documents
+- [x] Syntax highlighting themes for code blocks
+- [x] Cross-references between documents
+
+---
+
+## Sponsor
+
+`doc-engine-cli` is written and maintained by one person, in the open, and it is
+free under the MIT licence for everyone — no paid tier, no telemetry, no
+upsell. If it saves you the afternoon you would have spent fighting LaTeX, you
+can put something behind it:
+
+<div align="center">
+<a href="https://github.com/sponsors/leonardosalasd">
+  <img src="https://img.shields.io/badge/Sponsor%20on%20GitHub-%E2%9D%A4-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub" height="38"/>
+</a>
+</div>
+
+Sponsorship pays for the time that goes into the parts nobody sees: testing on
+Windows, chasing a rendering bug across five Python versions, answering issues,
+and keeping the release quality where it is.
+
+It is entirely optional. Starring the repository, reporting a bug you hit, or
+telling someone the tool exists all help too, and cost nothing.
 
 ---
 

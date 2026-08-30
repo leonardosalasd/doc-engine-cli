@@ -11,9 +11,9 @@ pipx upgrade doc-engine-cli
 
 | Version | Supported |
 |---|---|
-| 1.1.x | Yes |
-| 1.0.x | Please upgrade |
-| < 1.0 | No |
+| 2.0.x | Yes |
+| 1.1.x | Please upgrade |
+| < 1.1 | No |
 
 ---
 
@@ -76,9 +76,14 @@ This is a command-line tool that reads Markdown and templates from your machine
 and produces a PDF. Reports are most relevant when they involve:
 
 - Reading or writing files outside the intended input and output paths, for
-  example through a crafted image path, bibliography path, or template path.
+  example through a crafted image path, bibliography path, template path,
+  syntax theme path, or an entry in a `doc-engine.md` manifest.
 - Arbitrary code or command execution triggered by a Markdown file, a `.typ`
-  template, or front-matter values.
+  template, front-matter values, a `.doc-engine.toml`, or a Mermaid diagram,
+  which is rendered by running JavaScript in an embedded engine.
+- Anything reachable through `--fetch-images`, which is the only feature that
+  makes a network request. It is off unless asked for, and limited to http and
+  https with a timeout and a size ceiling.
 - Crafted input that causes the compiler to hang indefinitely or exhaust memory.
 
 Out of scope:
@@ -86,6 +91,8 @@ Out of scope:
 - Vulnerabilities in dependencies — report those upstream to
   [`typst`](https://github.com/messense/typst-py),
   [`mistune`](https://github.com/lepture/mistune),
+  [`mermaidx`](https://github.com/MohammadRaziei/mermaidx),
+  [`pillow`](https://github.com/python-pillow/Pillow),
   [`click`](https://github.com/pallets/click), or
   [`rich`](https://github.com/Textualize/rich). If a dependency issue affects
   this project specifically, a report here is still useful.
@@ -93,5 +100,6 @@ Out of scope:
   bugs — please [open an issue](https://github.com/leonardosalasd/doc-engine-cli/issues/new).
 
 A `.typ` template is executable input by design: pointing `--template` at a file
-means running it. Treat templates from untrusted sources the same way you would
-treat any other code you download and run.
+means running it. The same goes for a `doc-engine.md` manifest, which decides
+which files on your machine are read into the document. Treat both from
+untrusted sources the way you would treat any other code you download and run.

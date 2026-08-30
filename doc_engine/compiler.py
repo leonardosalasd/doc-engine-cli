@@ -5,8 +5,23 @@ from pathlib import Path
 import typst
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
+_THEMES_DIR = Path(__file__).parent / "themes"
 DEFAULT_TEMPLATE = "academic"
 DEFAULT_PAPER = "a4"
+
+
+def available_themes() -> list[str]:
+    """Syntax highlighting themes that ship with the package, sorted."""
+    return sorted(path.stem for path in _THEMES_DIR.glob("*.tmTheme"))
+
+
+def theme_path(name: str) -> Path:
+    """Resolve a theme identifier, which is a bundled name or a path."""
+    candidate = Path(name)
+    if candidate.suffix == ".tmTheme":
+        return candidate
+    return _THEMES_DIR / f"{name}.tmTheme"
+
 
 # Archival profiles typst-py accepts. a-2b is the usual choice for documents
 # that have to be readable decades from now; a-3b additionally allows embedded
@@ -59,6 +74,7 @@ def compile_pdf(
     generated: dict[str, str] | None = None,
     paper: str = DEFAULT_PAPER,
     pdf_standard: str | None = None,
+    code_theme: str | None = None,
 ) -> None:
     source = template_path(template)
     if not source.exists():
@@ -87,6 +103,13 @@ def compile_pdf(
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(content, encoding="utf-8")
 
+        theme_inject = "none"
+        if code_theme:
+            theme = theme_path(code_theme)
+            if theme.exists():
+                shutil.copy(theme, tmp / theme.name)
+                theme_inject = f'"{theme.name}"'
+
         accent_inject = f'rgb("{accent}")' if accent else "none"
 
         main_file = tmp / "main.typ"
@@ -102,6 +125,7 @@ def compile_pdf(
                 subtitle,
                 date,
                 paper,
+                theme_inject,
             ),
             encoding="utf-8",
         )
@@ -136,10 +160,13 @@ def _build_main(
     subtitle: str = "",
     date: str | None = None,
     paper: str = DEFAULT_PAPER,
+    theme_inject: str = "none",
 ) -> str:
+    theme_line = f"#set raw(theme: {theme_inject})\n" if theme_inject != "none" else ""
     date_line = f'  date: "{_escape(date)}",\n' if date else ""
     return (
         '#import "template.typ": setup_doc\n\n'
+        f"{theme_line}"
         f"{_FIT_IMAGE}\n"
         "#show: setup_doc.with(\n"
         f'  title: "{_escape(title)}",\n'

@@ -131,8 +131,14 @@ def assemble(
     generated: dict[str, str] = {}
     warnings: list[str] = []
 
+    # A link from one included file to another should jump inside the PDF rather
+    # than point at a file the reader does not have. Each entry gets an anchor,
+    # and the converter rewrites links that resolve to one of them.
+    anchors = {entry.path: f"entry-{position}" for position, entry in enumerate(manifest.entries)}
+
     for position, entry in enumerate(manifest.entries):
         namespace = f"e{position}_"
+        anchor = anchors[entry.path]
         if entry.kind == "markdown":
             # An included file may carry its own front matter, from back when it
             # was built on its own. The manifest owns the metadata now, so only
@@ -145,8 +151,9 @@ def assemble(
                 work_dir=work_dir,
                 fetch_remote=fetch_remote,
                 split_tall=split_tall,
+                anchors=anchors,
             )
-            body.append(piece.body)
+            body.append(f"#metadata(none) <{anchor}>\n\n{piece.body}")
             assets.update(piece.assets)
             generated.update(piece.generated)
             warnings.extend(piece.warnings)
@@ -155,11 +162,11 @@ def assemble(
             generated[name] = diagrams.render(
                 diagram_language(entry.path), entry.path.read_text(encoding="utf-8")
             )
-            body.append(_figure(name, entry.label))
+            body.append(f"#metadata(none) <{anchor}>\n\n" + _figure(name, entry.label))
         elif entry.kind == "image":
             name = f"assets/{namespace}{entry.path.name}"
             assets[name] = str(entry.path.resolve())
-            body.append(_figure(name, entry.label))
+            body.append(f"#metadata(none) <{anchor}>\n\n" + _figure(name, entry.label))
 
     return Conversion(body="\n\n".join(body), assets=assets, generated=generated, warnings=warnings)
 

@@ -124,3 +124,31 @@ class TestIncludedFileQuirks:
         (tmp_path / "doc-engine.md").write_text("- [](p.svg)\n- [D](d.md)\n")
         body = manifest.assemble(manifest.load(tmp_path / "doc-engine.md")).body
         assert "caption" not in body
+
+
+class TestCrossReferences:
+    """A link between two included files should jump inside the PDF."""
+
+    def make(self, root):
+        (root / "doc-engine.md").write_text("- [A](a.md)\n- [B](b.md)\n")
+        (root / "a.md").write_text("# A\n\nGo to [B](b.md) or [out](https://x.test).\n")
+        (root / "b.md").write_text("# B\n\nBack to [A](a.md).\n")
+        return manifest.assemble(manifest.load(root / "doc-engine.md")).body
+
+    def test_link_to_another_entry_becomes_internal(self, tmp_path) -> None:
+        body = self.make(tmp_path)
+        assert "#link(<entry-1>)" in body
+        assert "#link(<entry-0>)" in body
+
+    def test_every_entry_gets_an_anchor(self, tmp_path) -> None:
+        assert self.make(tmp_path).count("#metadata(none)") == 2
+
+    def test_external_links_are_untouched(self, tmp_path) -> None:
+        assert '#link("https://x.test")' in self.make(tmp_path)
+
+    def test_links_outside_a_manifest_stay_plain(self, tmp_path) -> None:
+        from doc_engine.converter import convert_document
+
+        (tmp_path / "b.md").write_text("# B\n")
+        body = convert_document("[B](b.md)", base_dir=tmp_path).body
+        assert '#link("b.md")' in body

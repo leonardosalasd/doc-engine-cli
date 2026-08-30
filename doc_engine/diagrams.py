@@ -10,6 +10,11 @@ from __future__ import annotations
 MERMAID_LANGUAGES = ("mermaid", "mmd")
 SVG_LANGUAGES = ("svg",)
 
+# Rendering the first Mermaid diagram boots a JavaScript engine and loads
+# Mermaid into it, which takes several seconds. Every diagram after that is
+# roughly a hundred times faster, so the cost is paid once per process.
+_warm = False
+
 
 class DiagramError(Exception):
     """A diagram source that could not be rendered."""
@@ -23,6 +28,16 @@ class DiagramError(Exception):
 def is_diagram(language: str) -> bool:
     lang = language.strip().lower()
     return lang in MERMAID_LANGUAGES or lang in SVG_LANGUAGES
+
+
+def is_warm() -> bool:
+    """Whether the Mermaid engine has already started in this process."""
+    return _warm
+
+
+def warmup() -> None:
+    """Start the Mermaid engine, so the caller can say why it is waiting."""
+    _render_mermaid("flowchart LR\n  A-->B\n")
 
 
 def render(language: str, source: str) -> str:
@@ -45,12 +60,16 @@ def _render_mermaid(source: str) -> str:
             "doc-engine-cli — reinstall with 'pip install --upgrade doc-engine-cli'",
         ) from exc
 
+    global _warm
     try:
-        return mermaidx.render(source).svg()
+        svg = mermaidx.render(source).svg()
     except DiagramError:
         raise
     except Exception as exc:
+        _warm = True
         raise DiagramError("mermaid", _clean(str(exc))) from exc
+    _warm = True
+    return svg
 
 
 def _clean(message: str) -> str:

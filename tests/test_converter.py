@@ -175,3 +175,49 @@ class TestTables:
     def test_single_column_table(self) -> None:
         result = convert("| Only |\n|---|\n| one |\n")
         assert "columns: (1fr)" in result
+
+
+class TestAlerts:
+    """GitHub-style callouts: > [!NOTE] and friends."""
+
+    def test_note_becomes_a_labelled_callout(self) -> None:
+        result = convert("> [!NOTE]\n> Something worth knowing.\n")
+        assert "Note" in result
+        assert "#0969da" in result
+        assert "!NOTE" not in result
+
+    def test_every_kind_is_recognized(self) -> None:
+        for kind, label in (
+            ("NOTE", "Note"),
+            ("TIP", "Tip"),
+            ("IMPORTANT", "Important"),
+            ("WARNING", "Warning"),
+            ("CAUTION", "Caution"),
+        ):
+            result = convert(f"> [!{kind}]\n> Body.\n")
+            assert f"[{label}]" in result
+            assert "Body." in result
+
+    def test_lowercase_marker_still_works(self) -> None:
+        assert "Note" in convert("> [!note]\n> Body.\n")
+
+    def test_each_kind_has_its_own_colour(self) -> None:
+        colours = {
+            convert(f"> [!{kind}]\n> Body.\n").split('rgb("')[1][:7]
+            for kind in ("NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION")
+        }
+        assert len(colours) == 5
+
+    def test_a_plain_quote_is_left_alone(self) -> None:
+        result = convert("> Just a quote.\n")
+        assert "Just a quote." in result
+        assert "Note" not in result
+
+    def test_a_bracket_that_is_not_an_alert_is_left_alone(self) -> None:
+        result = convert("> [!MADEUP]\n> Body.\n")
+        assert "MADEUP" in result
+
+    def test_body_keeps_its_formatting(self) -> None:
+        result = convert("> [!TIP]\n> Use **bold** and `code`.\n")
+        assert "*bold*" in result
+        assert "`code`" in result
