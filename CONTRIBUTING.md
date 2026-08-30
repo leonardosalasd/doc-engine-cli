@@ -33,9 +33,17 @@ pip install -e ".[dev]"
 Check that the tool runs before changing anything:
 
 ```bash
-doc-engine info
+python -m doc_engine --version
 python -m pytest tests/ -v
 ```
+
+Use `python -m doc_engine` rather than the bare `doc-engine` command while
+working on the project. If you already have a release installed, your shell can
+keep resolving `doc-engine` to that copy even inside the virtualenv, and you
+would end up testing the published version instead of your changes without
+anything saying so. Running it through `python -m` always uses the environment
+you are standing in. (`hash -r` usually settles the shell, and
+`which doc-engine` tells you which one you are about to run.)
 
 ---
 
