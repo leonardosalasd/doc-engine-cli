@@ -408,3 +408,6 @@ marimo/_lsp/
 __marimo__/
 
 refs.bib
+
+# A parked VS Code extension, kept locally. See vscode/NOT-PUBLISHED.md
+vscode/
