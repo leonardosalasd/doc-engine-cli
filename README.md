@@ -10,6 +10,7 @@
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/doc-engine-cli?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/doc-engine-cli)
 [![Typst](https://img.shields.io/badge/Powered_by-Typst-239DAD.svg?logo=typst&logoColor=white)](https://typst.app/)
 [![Tests](https://github.com/leonardosalasd/doc-engine-cli/actions/workflows/tests.yml/badge.svg)](https://github.com/leonardosalasd/doc-engine-cli/actions/workflows/tests.yml)
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-EA4AAA.svg?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/leonardosalasd)
 
 Transform any `README.md` into a premium, print-ready PDF report — no configuration, no templates, no LaTeX.
 
@@ -20,6 +21,14 @@ Transform any `README.md` into a premium, print-ready PDF report — no configur
 ```
 pipx install doc-engine-cli
 ```
+
+<br>
+
+<a href="https://github.com/sponsors/leonardosalasd">
+  <img src="https://img.shields.io/badge/Sponsor%20this%20project-%E2%9D%A4-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor doc-engine-cli on GitHub Sponsors" height="34"/>
+</a>
+
+<sub>Built and maintained by one person, in the open. Sponsorship keeps it that way.</sub>
 
 ---
 
@@ -783,6 +792,28 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build
 - [x] Project-level configuration file
 - [x] Syntax highlighting themes for code blocks
 - [x] Cross-references between documents
+
+---
+
+## Sponsor
+
+`doc-engine-cli` is written and maintained by one person, in the open, and it is
+free under the MIT licence for everyone — no paid tier, no telemetry, no
+upsell. If it saves you the afternoon you would have spent fighting LaTeX, you
+can put something behind it:
+
+<div align="center">
+<a href="https://github.com/sponsors/leonardosalasd">
+  <img src="https://img.shields.io/badge/Sponsor%20on%20GitHub-%E2%9D%A4-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub" height="38"/>
+</a>
+</div>
+
+Sponsorship pays for the time that goes into the parts nobody sees: testing on
+Windows, chasing a rendering bug across five Python versions, answering issues,
+and keeping the release quality where it is.
+
+It is entirely optional. Starring the repository, reporting a bug you hit, or
+telling someone the tool exists all help too, and cost nothing.
 
 ---
 
