@@ -42,15 +42,18 @@ pipx install doc-engine-cli
 > python -m venv .venv
 > source .venv/bin/activate        # Windows: .venv\Scripts\activate
 > pip install -e .
-> doc-engine --version             # should say 2.0.0
+> python -m doc_engine --version   # should say 2.0.0
 > ```
+>
+> Use `python -m doc_engine` rather than the bare `doc-engine` command while
+> testing. If you already have a copy installed, your shell may keep resolving
+> `doc-engine` to that older one even inside the virtualenv, and you would end
+> up testing the wrong version without noticing. Running it through `python -m`
+> always uses the environment you are standing in. (`hash -r` usually fixes the
+> shell too, and `which doc-engine` tells you which one you are about to run.)
 >
 > Then point it at a document — your own, or `examples/showcase.md` in the
 > checkout. When you are done, `deactivate` puts everything back.
->
-> If you would rather have it on your PATH and you already have an older
-> version installed, `pipx install --force --editable .` replaces it, and
-> `pipx install doc-engine-cli --force` puts the stable one back afterwards.
 >
 > Everything in this README describes v2.0.0 and works on that checkout. If
 > something misbehaves, an [issue](https://github.com/leonardosalasd/doc-engine-cli/issues/new)
