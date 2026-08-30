@@ -211,3 +211,29 @@ class TestOpening:
         monkeypatch.setattr(cli_module.os, "startfile", opened.append, raising=False)
         cli_module._open_file("out.pdf")
         assert opened == ["out.pdf"]
+
+
+class TestInfoJson:
+    """Machine-readable output, so a tool driving the CLI need not hardcode lists."""
+
+    def load(self):
+        import json
+
+        result = CliRunner().invoke(cli, ["info", "--json"])
+        assert result.exit_code == 0
+        return json.loads(result.output)
+
+    def test_output_is_valid_json(self) -> None:
+        assert self.load()["version"] == __version__
+
+    def test_it_lists_what_the_build_supports(self) -> None:
+        data = self.load()
+        assert data["templates"] == available_templates()
+        assert "github" in data["themes"]
+        assert data["default_paper"] in data["papers"]
+        assert "teal" in data["accents"]
+        assert data["tall_image_modes"] == ["fit", "split"]
+
+    def test_plain_info_is_still_human_readable(self) -> None:
+        result = CliRunner().invoke(cli, ["info"])
+        assert "{" not in result.output.split("Markdown support")[0]

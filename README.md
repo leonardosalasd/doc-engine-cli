@@ -34,43 +34,6 @@ pipx install doc-engine-cli
 
 </div>
 
-> [!NOTE]
-> ### v2.0.0 is finished and looking for testers
->
-> All of v2.0.0 is written and merged here — diagrams, math, multi-file
-> documents, seven layouts, page sizes, and the rest. It is **not on PyPI yet**,
-> because I would rather find the rough edges before publishing than after.
-> `pipx install doc-engine-cli` still gives you the stable **1.1.1**.
->
-> **Try it and help me break it.** This installs into a throwaway environment,
-> so whatever you already have stays exactly where it is:
->
-> ```bash
-> git clone https://github.com/leonardosalasd/doc-engine-cli.git
-> cd doc-engine-cli
-> python -m venv .venv
-> source .venv/bin/activate        # Windows: .venv\Scripts\activate
-> pip install -e .
-> python -m doc_engine --version   # should say 2.0.0
-> ```
->
-> Use `python -m doc_engine` rather than the bare `doc-engine` command while
-> testing. If you already have a copy installed, your shell may keep resolving
-> `doc-engine` to that older one even inside the virtualenv, and you would end
-> up testing the wrong version without noticing. Running it through `python -m`
-> always uses the environment you are standing in. (`hash -r` usually fixes the
-> shell too, and `which doc-engine` tells you which one you are about to run.)
->
-> Then point it at a document — your own, or `examples/showcase.md` in the
-> checkout. When you are done, `deactivate` puts everything back.
->
-> Everything in this README describes v2.0.0 and works on that checkout. If
-> something misbehaves, an [issue](https://github.com/leonardosalasd/doc-engine-cli/issues/new)
-> or a note in [Discussions](https://github.com/leonardosalasd/doc-engine-cli/discussions)
-> is genuinely useful — that feedback is what decides when this ships.
->
-> The release follows once it has been through real documents on real machines.
-
 ## Overview
 
 **doc-engine-cli** is a developer-first CLI tool that converts Markdown files into professionally styled PDF documents using [Typst](https://typst.app/) as its rendering backend. It is designed for teams and individual developers who need high-quality documentation artifacts without the complexity of LaTeX or manual typesetting.
@@ -168,7 +131,8 @@ doc-engine build path/to/file.md -o output.pdf -t "Custom Title" -a "Author Name
 
 ```
 doc-engine build [INPUT_FILE]   Convert a Markdown file into a PDF
-doc-engine info                 Show version, repository, and templates
+doc-engine info                 Show version, repository, and what is supported
+doc-engine info --json          The same, as JSON, for tools that drive the CLI
 doc-engine --version            Print the version and exit
 doc-engine --help               Show all commands and flags
 ```

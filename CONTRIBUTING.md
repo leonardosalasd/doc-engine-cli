@@ -55,7 +55,8 @@ locally is faster. If you have [uv](https://github.com/astral-sh/uv):
 
 ```bash
 uv run --python 3.10 --no-project --with mistune --with click --with rich \
-  --with typst --with pytest python -m pytest tests/ -q
+  --with typst --with mermaidx --with pillow --with tomli --with pytest \
+  python -m pytest tests/ -q
 ```
 
 Swap `3.10` for any version in the supported range.
@@ -100,7 +101,7 @@ feat: add support for A4 page size
 fix: prevent crash on legacy Windows consoles
 docs: document the --watch flag
 ci: test on Python 3.14
-chore: bump version to 1.1.1
+chore: bump version to 2.0.0
 ```
 
 Write the subject in the imperative mood, under ~72 characters. If the change
@@ -118,9 +119,9 @@ anything a future reader would need in order to not undo it by accident.
 
 Every pull request is reviewed by the repository owner
 ([CODEOWNERS](.github/CODEOWNERS)), and CI must be green before merging. CI runs
-the test suite across every supported Python version and operating system, plus
-a smoke job that installs the built package and drives the CLI from a clean
-directory.
+the test suite across every supported Python version and operating system, a
+smoke job that installs the built package and drives the CLI from a clean
+directory, a lint and format check, and a build of the Docker image.
 
 In the description, explain what changed and why. If it fixes an open issue,
 reference it with `Fixes #123`.
@@ -143,6 +144,8 @@ passes it the document metadata:
   accent: none,
   branding: true,
   version: "",
+  paper: "a4",
+  ..options,
   body,
 ) = { ... }
 ```
@@ -152,8 +155,14 @@ should:
 
 - Honor `accent` when it is not `none`, and fall back to its own default color.
 - Honor `branding: false` by hiding the `doc-engine` attribution.
+- Pass `paper` through to `set page`, rather than hardcoding a size.
 - Render `subtitle` only when it is not empty.
 - Render the bibliography when `bibliography_file` is not `none`.
+- Keep the `..options` sink, so a later release can add an option without
+  breaking templates that have not been updated.
+- End every font stack in one Typst ships — `New Computer Modern`,
+  `Libertinus Serif`, or `DejaVu Sans Mono` — so the document looks the same
+  inside a bare container as it does on a laptop full of fonts.
 
 Templates are discovered automatically, so dropping the file in is enough for
 `--template <name>` to find it. Add it to the templates table in the README and
@@ -166,9 +175,17 @@ to the test in `tests/test_cli.py` that asserts the shipped set.
 | Module | Responsibility |
 |---|---|
 | `cli.py` | Argument parsing, Git detection, watch loop, output naming |
+| `help.py` | The Rich help screens |
+| `settings.py` | Deciding between a flag, front matter, and the project file |
+| `config.py` | Reading `.doc-engine.toml` |
 | `frontmatter.py` | Leading `---` metadata block |
+| `manifest.py` | Building one document out of several files |
 | `linter.py` | Source checks reported with line and column |
 | `converter.py` | Markdown AST → Typst markup |
+| `latex.py` | LaTeX math → Typst math |
+| `diagrams.py` | Mermaid and SVG blocks |
+| `images.py` | Cutting pictures taller than a page |
+| `remote.py` | Downloading linked images |
 | `compiler.py` | Template injection and PDF compilation |
 
 Changes usually belong in exactly one of these. If a change needs to touch all
