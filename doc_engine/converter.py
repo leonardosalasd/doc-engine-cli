@@ -49,6 +49,20 @@ _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 # Pandoc-style [@key] survives escaping as \[\@key\]; restore it as a Typst @key.
 _CITATION = re.compile(r"\\\[\\@([a-zA-Z0-9_\-]+)\\\]")
 
+# GitHub renders a blockquote opening with [!NOTE] and friends as a coloured
+# callout. The marker reaches this point already escaped, since it is ordinary
+# text as far as the parser is concerned.
+_ALERT = re.compile(r"^\\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\\]\s*", re.IGNORECASE)
+
+# Label and colour for each kind, following what GitHub uses.
+_ALERT_STYLES = {
+    "NOTE": ("Note", "#0969da"),
+    "TIP": ("Tip", "#1a7f37"),
+    "IMPORTANT": ("Important", "#8250df"),
+    "WARNING": ("Warning", "#9a6700"),
+    "CAUTION": ("Caution", "#cf222e"),
+}
+
 _UNCHECKED = (
     "#box(width: 0.85em, height: 0.85em, radius: 2pt, "
     'stroke: 1pt + rgb("#94a3b8"), baseline: 0.15em)'
@@ -244,13 +258,33 @@ class TypstRenderer(mistune.BaseRenderer):
 
     def block_quote(self, token: dict, state: Any) -> str:
         content = _render_children(self, token, state).strip()
+        alert = _ALERT.match(content)
+        if alert:
+            return self._alert(alert.group(1).upper(), content[alert.end() :].strip())
         return (
             "#block(\n"
-            "  inset: (left: 1.2em, y: 0.6em),\n"
-            '  stroke: (left: 2.5pt + rgb("#4a90d9")),\n'
+            "  width: 100%,\n"
+            "  inset: (left: 1em, rest: 0.8em),\n"
+            '  stroke: (left: 3pt + rgb("#4a90d9")),\n'
             '  fill: rgb("#f0f4f8"),\n'
-            "  radius: 2pt,\n"
+            "  radius: (right: 3pt),\n"
             f")[{content}]\n\n"
+        )
+
+    def _alert(self, kind: str, body: str) -> str:
+        label, color = _ALERT_STYLES[kind]
+        return (
+            "#block(\n"
+            "  width: 100%,\n"
+            "  inset: (left: 1em, rest: 0.8em),\n"
+            f'  stroke: (left: 3pt + rgb("{color}")),\n'
+            f'  fill: rgb("{color}").lighten(92%),\n'
+            "  radius: (right: 3pt),\n"
+            ")[\n"
+            f'  #text(weight: 700, fill: rgb("{color}"))[{label}]\n'
+            "  #v(0.35em, weak: true)\n"
+            f"  {body}\n"
+            "]\n\n"
         )
 
     def list(self, token: dict, state: Any) -> str:

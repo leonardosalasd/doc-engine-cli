@@ -33,14 +33,24 @@ pipx install doc-engine-cli
 > because I would rather find the rough edges before publishing than after.
 > `pipx install doc-engine-cli` still gives you the stable **1.1.1**.
 >
-> **Try it and help me break it:**
+> **Try it and help me break it.** This installs into a throwaway environment,
+> so whatever you already have stays exactly where it is:
 >
 > ```bash
 > git clone https://github.com/leonardosalasd/doc-engine-cli.git
 > cd doc-engine-cli
+> python -m venv .venv
+> source .venv/bin/activate        # Windows: .venv\Scripts\activate
 > pip install -e .
-> doc-engine build
+> doc-engine --version             # should say 2.0.0
 > ```
+>
+> Then point it at a document — your own, or `examples/showcase.md` in the
+> checkout. When you are done, `deactivate` puts everything back.
+>
+> If you would rather have it on your PATH and you already have an older
+> version installed, `pipx install --force --editable .` replaces it, and
+> `pipx install doc-engine-cli --force` puts the stable one back afterwards.
 >
 > Everything in this README describes v2.0.0 and works on that checkout. If
 > something misbehaves, an [issue](https://github.com/leonardosalasd/doc-engine-cli/issues/new)
