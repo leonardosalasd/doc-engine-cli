@@ -15,7 +15,7 @@
 Transform any `README.md` into a premium, print-ready PDF report — no configuration, no templates, no LaTeX.
 
 <br>
-<img src="assets/doc-engine-v2.gif" alt="doc-engine-cli turning a Markdown file into a PDF" width="820"/>
+<img src="assets/main.gif" alt="doc-engine-cli turning a Markdown file into a PDF" width="820"/>
 <br>
 
 ```
