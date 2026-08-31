@@ -96,6 +96,29 @@ pipx install doc-engine-cli
 ```
 *(If you don't have `pipx`, you can install it via `pip install pipx`)*
 
+> [!IMPORTANT]
+> **If pipx fails with `InvalidVersion: Invalid version: ''`**, your pipx is too
+> old. Update it and try again:
+>
+> ```bash
+> uv tool install pipx --force     # or: pip install --upgrade pipx
+> hash -r && pipx install doc-engine-cli
+> ```
+>
+> The crash is inside pipx, not the install — it happens while pipx records what
+> it just installed, so you may even find a working copy underneath the wall of
+> text. Older pipx versions pair with `packaging < 26`, which chokes on an extra
+> named `v8` that one of the dependencies declares: PEP 440 reads `v8` as a
+> version number, and the comparison then runs against an empty string. pipx
+> 1.17 requires `packaging >= 26` and is unaffected.
+>
+> [uv](https://github.com/astral-sh/uv) avoids the whole thing, if you would
+> rather not touch pipx:
+>
+> ```bash
+> uv tool install doc-engine-cli
+> ```
+
 ### Generate Your First PDF
 
 Navigate to any project directory containing a `README.md` and run:
