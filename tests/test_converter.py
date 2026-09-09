@@ -136,6 +136,87 @@ class TestFootnotes:
         assert result.count("The evidence.") == 1
 
 
+class TestHtmlImages:
+    def test_block_image_is_embedded(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"image")
+        result = convert_document('<img src="logo.png">', base_dir=tmp_path)
+        assert len(result.assets) == 1
+        assert f'#fit-image("{next(iter(result.assets))}")' in result.body
+
+    def test_inline_image_preserves_surrounding_text(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"image")
+        result = convert_document('Before <img src="logo.png" /> after.', base_dir=tmp_path)
+        assert len(result.assets) == 1
+        assert result.body.startswith("Before #fit-image(")
+        assert " after." in result.body
+
+    def test_wrapped_images_share_markdown_assets(self, tmp_path) -> None:
+        for name in ("one.png", "two.png"):
+            (tmp_path / name).write_bytes(b"image")
+        result = convert_document(
+            '<div>\n<img src="one.png"><img src="two.png">\n</div>\n\n![again](one.png)',
+            base_dir=tmp_path,
+        )
+        assert len(result.assets) == 2
+        first, second = result.assets
+        assert result.body.index(first) < result.body.index(second)
+        assert result.body.count(first) == 2
+
+    def test_attribute_case_quotes_and_entities(self, tmp_path) -> None:
+        (tmp_path / "a&b.png").write_bytes(b"image")
+        result = convert_document("<IMG SRC='a&amp;b.png' ALT='logo' />", base_dir=tmp_path)
+        assert len(result.assets) == 1
+        assert next(iter(result.assets.values())).endswith("a&b.png")
+
+    def test_missing_image_uses_escaped_alt(self, tmp_path) -> None:
+        result = convert_document('<img src="missing.png" alt="A &amp; *B*">', base_dir=tmp_path)
+        assert not result.assets
+        assert r"[A & \*B\*]" in result.body
+
+    def test_remote_images_require_opt_in(self, tmp_path, monkeypatch) -> None:
+        def unexpected_fetch(*args):
+            raise AssertionError("remote fetch was not enabled")
+
+        monkeypatch.setattr("doc_engine.converter.remote.fetch", unexpected_fetch)
+        result = convert_document(
+            '<img src="https://example.test/a.png" alt="remote">', base_dir=tmp_path
+        )
+        assert not result.assets
+        assert "[remote]" in result.body
+
+    def test_remote_image_reuses_enabled_fetch(self, tmp_path, monkeypatch) -> None:
+        image = tmp_path / "download.png"
+        image.write_bytes(b"image")
+        calls = []
+
+        def fetch(url, destination):
+            calls.append((url, destination))
+            return image
+
+        monkeypatch.setattr("doc_engine.converter.remote.fetch", fetch)
+        result = convert_document(
+            '<img src="https://example.test/a.png">',
+            base_dir=tmp_path,
+            work_dir=tmp_path,
+            fetch_remote=True,
+        )
+        assert len(result.assets) == 1
+        assert calls == [("https://example.test/a.png", tmp_path)]
+
+    def test_comments_and_script_content_are_not_images(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"image")
+        result = convert_document(
+            '<!-- <img src="logo.png"> -->\n\n<script>"<img src=logo.png>"</script>',
+            base_dir=tmp_path,
+        )
+        assert not result.assets
+        assert "#fit-image" not in result.body
+
+    def test_missing_src_and_existing_linebreak_behavior(self) -> None:
+        assert "[missing]" in convert('<img alt="missing">')
+        assert convert("a<br>b") == "a\\\nb\n\n"
+
+
 class TestImages:
     def test_local_image_is_embedded(self, tmp_path) -> None:
         (tmp_path / "logo.png").write_bytes(b"\x89PNG\r\n")
