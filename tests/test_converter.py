@@ -68,6 +68,23 @@ class TestStripFirstHeading:
         md = "## Subtitle\n\nBody"
         assert strip_first_heading(md) == md
 
+    def test_keeps_comments_inside_fenced_code(self) -> None:
+        md = "```bash\n# install\npipx install doc-engine-cli\n```\n\n# Title\n\nBody"
+        result = strip_first_heading(md)
+        assert "# install" in result
+        assert "# Title" not in result
+
+    def test_removes_an_underlined_h1(self) -> None:
+        md = "Title\n=====\n\nBody"
+        result = strip_first_heading(md)
+        assert "Title" not in result
+        assert "Body" in result
+
+    def test_removes_what_the_title_promotes(self) -> None:
+        md = "```\n# fake\n```\n\nReal\n====\n\nBody"
+        assert extract_title(md) == "Real"
+        assert "Real" not in strip_first_heading(md)
+
 
 class TestConvert:
     def test_heading_levels(self) -> None:
