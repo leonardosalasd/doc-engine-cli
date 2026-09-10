@@ -608,11 +608,13 @@ The converter module parses Markdown using [`mistune`](https://github.com/leptur
 | `- [x] task` | rendered checkbox |
 | `text[^1]` | `#footnote[...]` |
 | `![alt](local.png)` | `#image("local.png")` |
-| `<img src="local.png" alt="alt">` | Embedded image, using the same path as Markdown images; sizing attributes are ignored |
+| `<img src="local.png" width="300">` | Embedded image, using the same path as Markdown images |
 | `> blockquote` | `#block(...)` |
 | `---` | `#line(...)` |
 
 Special characters (`#`, `$`, `@`, `*`, `_`, etc.) are automatically escaped to prevent Typst interpretation.
+
+A `width` or `height` on an HTML image is read as CSS pixels, a 96th of an inch each, and no picture is drawn wider than the text block however large the number is. Percentages are ignored, since fitting the text block is already the default.
 
 ### PDF Templates
 
@@ -744,7 +746,7 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build
 - [x] Task lists (`- [x]` / `- [ ]`)
 - [x] Footnotes (`[^1]`)
 - [x] Local images, and remote ones with `--fetch-images`
-- [x] Raw HTML `<img>` tags (inline or block); `width`, `height`, and other sizing attributes are not honored
+- [x] Raw HTML `<img>` tags (inline or block), sized by `width` and `height` in pixels
 - [x] Math blocks (LaTeX `$…$` and `$$…$$`)
 - [x] Mermaid and SVG diagram blocks
 - [x] GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`)

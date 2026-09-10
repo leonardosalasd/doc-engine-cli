@@ -230,6 +230,24 @@ class TestHtmlImages:
         assert not result.assets
         assert "#fit-image" not in result.body
 
+    def test_pixel_sizes_become_lengths(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"image")
+        body = convert_document('<img src="logo.png" width="820">', base_dir=tmp_path).body
+        assert ", width: 615pt)" in body
+        body = convert_document('<img src="logo.png" height="34px">', base_dir=tmp_path).body
+        assert ", height: 25.5pt)" in body
+
+    def test_unusable_sizes_fall_back_to_fitting(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"image")
+        for attribute in ('width="50%"', 'width="auto"', 'width="0"', 'width="-4"', 'width=""'):
+            body = convert_document(f'<img src="logo.png" {attribute}>', base_dir=tmp_path).body
+            assert "width:" not in body
+
+    def test_markdown_images_ask_for_no_size(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"image")
+        body = convert_document("![alt](logo.png)", base_dir=tmp_path).body
+        assert body.strip() == '#fit-image("assets/0_logo.png")'
+
     def test_missing_src_and_existing_linebreak_behavior(self) -> None:
         assert "[missing]" in convert('<img alt="missing">')
         assert convert("a<br>b") == "a\\\nb\n\n"
