@@ -23,7 +23,12 @@ from doc_engine.compiler import (
     available_themes,
     compile_pdf,
 )
-from doc_engine.converter import convert_document, extract_title, strip_first_heading
+from doc_engine.converter import (
+    convert_document,
+    extract_title,
+    extract_title_markup,
+    strip_first_heading,
+)
 from doc_engine.diagrams import DiagramError
 from doc_engine.help import RichCommand, RichGroup
 from doc_engine.linter import has_errors, lint
@@ -383,6 +388,7 @@ def build(
         if resolved_bib is None and collected is not None:
             resolved_bib = collected.bibliography
         resolved_title = title or meta.get("title") or extract_title(content) or input_path.stem
+        title_markup = None if title or meta.get("title") else extract_title_markup(content)
         resolved_author = chosen.author or _detect_git_user()
         resolved_subtitle = subtitle or meta.get("subtitle") or ""
         resolved_date = date or meta.get("date")
@@ -447,6 +453,7 @@ def build(
                 compile_pdf(
                     typst_body=conversion.body,
                     title=resolved_title,
+                    title_markup=title_markup,
                     author=resolved_author,
                     subtitle=resolved_subtitle,
                     date=resolved_date,

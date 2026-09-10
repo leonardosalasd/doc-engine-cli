@@ -75,6 +75,7 @@ def compile_pdf(
     paper: str = DEFAULT_PAPER,
     pdf_standard: str | None = None,
     code_theme: str | None = None,
+    title_markup: str | None = None,
 ) -> None:
     source = template_path(template)
     if not source.exists():
@@ -126,6 +127,8 @@ def compile_pdf(
                 date,
                 paper,
                 theme_inject,
+                # Custom templates retain the existing string-only title contract.
+                title_markup if Path(template).suffix != ".typ" else None,
             ),
             encoding="utf-8",
         )
@@ -161,7 +164,9 @@ def _build_main(
     date: str | None = None,
     paper: str = DEFAULT_PAPER,
     theme_inject: str = "none",
+    title_markup: str | None = None,
 ) -> str:
+    title_line = f"  title_content: [{title_markup}],\n" if title_markup is not None else ""
     theme_line = f"#set raw(theme: {theme_inject})\n" if theme_inject != "none" else ""
     date_line = f'  date: "{_escape(date)}",\n' if date else ""
     return (
@@ -170,6 +175,7 @@ def _build_main(
         f"{_FIT_IMAGE}\n"
         "#show: setup_doc.with(\n"
         f'  title: "{_escape(title)}",\n'
+        f"{title_line}"
         f'  subtitle: "{_escape(subtitle)}",\n'
         f'  author: "{_escape(author)}",\n'
         f"{date_line}"

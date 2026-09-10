@@ -1,5 +1,6 @@
 #let setup_doc(
   title: "",
+  title_content: none,
   subtitle: "",
   author: "Anonymous",
   date: datetime.today().display(),
@@ -17,6 +18,14 @@
   let surface = rgb("#f1f5f9")
 
   set document(author: author, title: title)
+  let cover-title = context {
+    // Capture the surrounding title size before raw's default scaling applies.
+    let title-size = text.size
+    show raw.where(block: false): it => text(
+      font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas", "Courier New"),
+      size: title-size, it.text)
+    if title_content == none { title } else { title_content }
+  }
 
   set page(
     paper: paper,
@@ -80,7 +89,7 @@
     #v(-8%)
     #line(length: 18%, stroke: 3pt + accent-color)
     #v(1.2em)
-    #text(size: 44pt, weight: 800, tracking: -2pt, fill: ink)[#title]
+    #text(size: 44pt, weight: 800, tracking: -2pt, fill: ink)[#cover-title]
     #if subtitle != "" [
       #v(0.8em)
       #text(size: 16pt, weight: 400, fill: muted)[#subtitle]

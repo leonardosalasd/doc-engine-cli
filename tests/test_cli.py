@@ -237,3 +237,32 @@ class TestInfoJson:
     def test_plain_info_is_still_human_readable(self) -> None:
         result = CliRunner().invoke(cli, ["info"])
         assert "{" not in result.output.split("Markdown support")[0]
+
+
+class TestPromotedTitle:
+    def test_formatted_heading_reaches_compiler(self, tmp_path, monkeypatch) -> None:
+        import importlib
+
+        module = importlib.import_module("doc_engine.cli")
+        captured = {}
+        monkeypatch.setattr(module, "compile_pdf", lambda **kwargs: captured.update(kwargs))
+        doc = tmp_path / "doc.md"
+        doc.write_text("# **Document** *Title*\n\n## Body\nText.\n")
+        result = CliRunner().invoke(cli, ["build", str(doc)])
+        assert result.exit_code == 0, result.output
+        assert captured["title"] == "Document Title"
+        assert captured["title_markup"] == "*Document* _Title_"
+        assert "Document" not in captured["typst_body"]
+
+    def test_explicit_title_remains_literal(self, tmp_path, monkeypatch) -> None:
+        import importlib
+
+        module = importlib.import_module("doc_engine.cli")
+        captured = {}
+        monkeypatch.setattr(module, "compile_pdf", lambda **kwargs: captured.update(kwargs))
+        doc = tmp_path / "doc.md"
+        doc.write_text("# **Document** *Title*\n\nBody.\n")
+        result = CliRunner().invoke(cli, ["build", str(doc), "--title", "*Literal*"])
+        assert result.exit_code == 0, result.output
+        assert captured["title"] == "*Literal*"
+        assert captured["title_markup"] is None

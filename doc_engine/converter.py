@@ -470,6 +470,16 @@ class TypstRenderer(mistune.BaseRenderer):
         return data
 
 
+def _parse_markdown(markdown: str) -> tuple[list[dict], Any]:
+    md = mistune.create_markdown(renderer=None, plugins=[*_PLUGINS, _math_plugin])
+    return md.parse(markdown)
+
+
+def _render_markdown_tokens(renderer: TypstRenderer, tokens: list[dict], state: Any) -> str:
+    renderer.load_footnotes(tokens, state)
+    return _CITATION.sub(r"@\1", renderer.render_tokens(tokens, state))
+
+
 def convert_document(
     markdown: str,
     base_dir: Path | None = None,
@@ -495,11 +505,8 @@ def convert_document(
         split_tall=split_tall,
         anchors=anchors,
     )
-    md = mistune.create_markdown(renderer=None, plugins=[*_PLUGINS, _math_plugin])
-    tokens, state = md.parse(markdown)
-    renderer.load_footnotes(tokens, state)
-    body = renderer.render_tokens(tokens, state)
-    body = _CITATION.sub(r"@\1", body)
+    tokens, state = _parse_markdown(markdown)
+    body = _render_markdown_tokens(renderer, tokens, state)
     return Conversion(
         body=body,
         assets=renderer.assets,
@@ -512,12 +519,33 @@ def convert(markdown: str, base_dir: Path | None = None) -> str:
     return convert_document(markdown, base_dir).body
 
 
+def _title_tokens(markdown: str) -> tuple[list[dict], Any]:
+    tokens, state = _parse_markdown(markdown)
+    for token in tokens:
+        if token["type"] == "heading" and token["attrs"]["level"] == 1:
+            return token.get("children", []), state
+    return [], state
+
+
 def extract_title(markdown: str) -> str:
-    for line in markdown.split("\n"):
-        stripped = line.strip()
-        if stripped.startswith("# ") and not stripped.startswith("##"):
-            return stripped[2:].strip() or "Documentation"
-    return "Documentation"
+    """Plain text for metadata; formatting belongs in the displayed title."""
+
+    def text(tokens: list[dict]) -> str:
+        return "".join(
+            text(token["children"]) if "children" in token else token.get("raw", "")
+            for token in tokens
+        )
+
+    tokens, _ = _title_tokens(markdown)
+    return text(tokens) or "Documentation"
+
+
+def extract_title_markup(markdown: str) -> str | None:
+    """Render the promoted H1 through the same inline renderer as body headings."""
+    tokens, state = _title_tokens(markdown)
+    if not tokens:
+        return None
+    return _render_markdown_tokens(TypstRenderer(), tokens, state)
 
 
 def strip_first_heading(markdown: str) -> str:
