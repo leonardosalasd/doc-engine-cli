@@ -95,6 +95,33 @@ def _math_plugin(md: mistune.Markdown) -> None:
     md.inline.register("inline_math", _INLINE_MATH, parse_inline, before="link")
 
 
+def _css_length(value: str | None) -> str | None:
+    """A Typst length for an HTML width or height written in pixels.
+
+    A CSS pixel is a 96th of an inch, so a stated size converts to a real length
+    rather than to some guess about how wide a page is. Percentages are left
+    alone: they measure against a viewport a PDF does not have, and fitting the
+    picture to the text width is already what the default does.
+    """
+    if not value:
+        return None
+    try:
+        pixels = float(value.strip().removesuffix("px").strip())
+    except ValueError:
+        return None
+    if pixels <= 0:
+        return None
+    return f"{pixels * 0.75:g}pt"
+
+
+def _size_arguments(attrs: dict) -> str:
+    return "".join(
+        f", {name}: {length}"
+        for name in ("width", "height")
+        if (length := _css_length(attrs.get(name)))
+    )
+
+
 def _render_children(renderer: mistune.BaseRenderer, token: dict, state: Any) -> str:
     children = token.get("children")
     if not children:
@@ -196,21 +223,21 @@ class TypstRenderer(mistune.BaseRenderer):
         return self._anchors.get(resolved)
 
     def image(self, token: dict, state: Any) -> str:
-        url = token.get("attrs", {}).get("url", "")
+        attrs = token.get("attrs", {})
         alt = _render_children(self, token, state)
-        asset = self._register_image(url)
+        asset = self._register_image(attrs.get("url", ""))
         if asset is None:
             return f"[{alt}]" if alt else ""
-        return self._place(asset)
+        return self._place(asset, _size_arguments(attrs))
 
-    def _place(self, asset: str) -> str:
+    def _place(self, asset: str, size: str = "") -> str:
         """Emit a picture, cut across pages when it is too tall for one."""
         if self._split_tall is None:
-            return f'#fit-image("{asset}")'
+            return f'#fit-image("{asset}"{size})'
         pieces = self._cut(asset)
         if len(pieces) == 1:
-            return f'#fit-image("{pieces[0]}")'
-        return "\n#pagebreak(weak: true)\n".join(f'#fit-image("{p}")' for p in pieces)
+            return f'#fit-image("{pieces[0]}"{size})'
+        return "\n#pagebreak(weak: true)\n".join(f'#fit-image("{p}"{size})' for p in pieces)
 
     def _cut(self, asset: str) -> list[str]:
         # The same picture can appear more than once, and it is registered under
@@ -261,7 +288,11 @@ class TypstRenderer(mistune.BaseRenderer):
         return "\n".join(
             self.image(
                 {
-                    "attrs": {"url": attrs.get("src") or ""},
+                    "attrs": {
+                        "url": attrs.get("src") or "",
+                        "width": attrs.get("width"),
+                        "height": attrs.get("height"),
+                    },
                     "children": [{"type": "text", "raw": attrs.get("alt") or ""}],
                 },
                 state,
