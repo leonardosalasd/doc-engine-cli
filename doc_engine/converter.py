@@ -46,6 +46,8 @@ _BLOCK_MATH = r"^ {0,3}\$\$[ \t]*\n(?P<math_text>[\s\S]+?)\n\$\$[ \t]*$"
 _INLINE_MATH = r"\$(?!\s)(?P<math_text>(?:[^$\\\n]|\\.)+?)(?<!\s)\$(?!\d)"
 _REMOTE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:)?//", re.IGNORECASE)
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
+_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_SETEXT_H1 = re.compile(r"^ {0,3}=+[ \t]*$")
 
 # Pandoc-style [@key] survives escaping as \[\@key\]; restore it as a Typst @key.
 _CITATION = re.compile(r"\\\[\\@([a-zA-Z0-9_\-]+)\\\]")
@@ -549,14 +551,33 @@ def extract_title_markup(markdown: str) -> str | None:
 
 
 def strip_first_heading(markdown: str) -> str:
+    """Remove the H1 the cover page promotes, so the document does not repeat it.
+
+    This has to drop the same heading `extract_title` reads. A line that starts
+    with `# ` inside fenced code is a comment, not a heading, and an H1 can be
+    written as an underline instead, so neither can be decided by looking at one
+    line on its own.
+    """
     lines = markdown.split("\n")
     result: list[str] = []
     found = False
+    fence = ""
     for line in lines:
-        if not found and line.strip().startswith("# ") and not line.strip().startswith("##"):
-            found = True
-            continue
-        if found and not result and not line.strip():
+        stripped = line.strip()
+        if fence:
+            if stripped.startswith(fence) and set(stripped) == {fence[0]}:
+                fence = ""
+        elif opening := _FENCE.match(line):
+            fence = opening.group(1)
+        elif not found:
+            if stripped.startswith("# "):
+                found = True
+                continue
+            if _SETEXT_H1.match(line) and result and result[-1].strip():
+                found = True
+                result.pop()
+                continue
+        if found and not result and not stripped:
             continue
         result.append(line)
     return "\n".join(result)
