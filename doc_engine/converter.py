@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
@@ -112,6 +113,16 @@ class Conversion:
     assets: dict[str, str] = field(default_factory=dict)
     generated: dict[str, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+
+
+class _ImageParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.images: list[dict[str, str | None]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "img":
+            self.images.append(dict(attrs))
 
 
 class TypstRenderer(mistune.BaseRenderer):
@@ -239,7 +250,22 @@ class TypstRenderer(mistune.BaseRenderer):
         raw = token.get("raw", "").strip().lower()
         if raw in ("<br>", "<br/>", "<br />"):
             return "\\\n"
-        return ""
+        return self._html_images(token, state)
+
+    def _html_images(self, token: dict, state: Any) -> str:
+        parser = _ImageParser()
+        parser.feed(token.get("raw", ""))
+        parser.close()
+        return "\n".join(
+            self.image(
+                {
+                    "attrs": {"url": attrs.get("src") or ""},
+                    "children": [{"type": "text", "raw": attrs.get("alt") or ""}],
+                },
+                state,
+            )
+            for attrs in parser.images
+        )
 
     def inline_math(self, token: dict, state: Any) -> str:
         return f"${latex.to_typst(token['raw'])}$"
@@ -339,7 +365,8 @@ class TypstRenderer(mistune.BaseRenderer):
         return '\n#line(length: 100%, stroke: 0.5pt + rgb("#d0d0d0"))\n\n'
 
     def block_html(self, token: dict, state: Any) -> str:
-        return ""
+        body = self._html_images(token, state)
+        return f"{body}\n\n" if body else ""
 
     def footnotes(self, token: dict, state: Any) -> str:
         return ""
