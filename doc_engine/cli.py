@@ -317,7 +317,12 @@ def build(
         raise SystemExit(1)
 
     if dry_run:
-        issues = lint(input_path.read_text(encoding="utf-8"))
+        try:
+            raw = input_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            console.print(f"[bold red]Error:[/bold red] Cannot read {input_path} as UTF-8 ({exc})")
+            raise SystemExit(1) from exc
+        issues = lint(raw)
         if issues:
             _print_issues(issues, str(input_path))
             errors = sum(1 for i in issues if i.severity == "error")
