@@ -266,3 +266,13 @@ class TestPromotedTitle:
         assert result.exit_code == 0, result.output
         assert captured["title"] == "*Literal*"
         assert captured["title_markup"] is None
+
+
+class TestDryRunEncoding:
+    def test_dry_run_non_utf8_file_reports_clean_error(self, tmp_path) -> None:
+        bad = tmp_path / "doc.md"
+        bad.write_bytes(b"# T\n\ncaf\xe9 in latin-1\n")
+        result = CliRunner().invoke(cli, ["build", str(bad), "--dry-run"])
+        assert not isinstance(result.exception, UnicodeDecodeError)
+        assert result.exit_code == 1
+        assert "UTF-8" in result.output
