@@ -9,6 +9,9 @@
   branding: true,
   version: "",
   paper: "a4",
+  toc: true,
+  margin: none,
+  text_align: none,
   ..options,
   body,
 ) = {
@@ -29,7 +32,7 @@
 
   set page(
     paper: paper,
-    margin: (top: 1in, bottom: 1in, left: 1.3in, right: 1.3in),
+    margin: if margin == none { (top: 1in, bottom: 1in, left: 1.3in, right: 1.3in) } else { margin },
     footer: context {
       set text(font: "Inter", size: 8pt, fill: muted)
       if branding {
@@ -45,7 +48,8 @@
   )
 
   set text(font: ("Inter", "Helvetica Neue", "Arial", "Libertinus Serif"), size: 10.5pt, fill: ink, lang: "en")
-  set par(justify: false, leading: 0.8em, spacing: 1.1em)
+  set par(justify: if text_align == none { false } else { text_align == "justify" }, leading: 0.8em, spacing: 1.1em)
+  show par: it => if text_align == "right" { align(right, it) } else if text_align == "center" { align(center, it) } else { it }
 
   show raw.where(block: true): it => block(
     fill: surface,
@@ -112,8 +116,10 @@
     v(12pt, weak: true)
     strong(it)
   }
-  outline(title: [Contents], indent: 1.2em, depth: 2)
-  pagebreak()
+  if toc {
+    outline(title: [Contents], indent: 1.2em, depth: 2)
+    pagebreak()
+  }
 
   body
 

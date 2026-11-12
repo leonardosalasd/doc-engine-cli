@@ -9,6 +9,9 @@
   branding: true,
   version: "",
   paper: "a4",
+  toc: true,
+  margin: none,
+  text_align: none,
   ..options,
   body,
 ) = {
@@ -29,7 +32,7 @@
 
   set page(
     paper: paper,
-    margin: (top: 1.3in, bottom: 1.3in, left: 1.4in, right: 1.4in),
+    margin: if margin == none { (top: 1.3in, bottom: 1.3in, left: 1.4in, right: 1.4in) } else { margin },
     header: context {
       if counter(page).get().first() > 1 [
         #set text(font: ("Linux Libertine", "Libertinus Serif", "Times New Roman"), size: 9pt, fill: muted, style: "italic")
@@ -43,7 +46,8 @@
   )
 
   set text(font: ("Linux Libertine", "Libertinus Serif", "New Computer Modern", "Times New Roman"), size: 11.5pt, fill: ink, lang: "en")
-  set par(justify: true, leading: 0.75em, first-line-indent: 1.4em, spacing: 0.75em)
+  set par(justify: if text_align == none { true } else { text_align == "justify" }, leading: 0.75em, first-line-indent: 1.4em, spacing: 0.75em)
+  show par: it => if text_align == "right" { align(right, it) } else if text_align == "center" { align(center, it) } else { it }
 
   show heading: set text(font: ("Linux Libertine", "Libertinus Serif", "Times New Roman"))
 
@@ -117,7 +121,7 @@
     v(11pt, weak: true)
     strong(it)
   }
-  outline(title: [Contents], indent: 1.5em, depth: 3)
+  if toc { outline(title: [Contents], indent: 1.5em, depth: 3) }
 
   body
 

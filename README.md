@@ -161,6 +161,9 @@ doc-engine --help               Show all commands and flags
 | `--template` | `academic` | A built-in layout (`academic`, `article`, `book`, `minimal`, `modern`, `report`, `technical`) or a path to your own `.typ` file. |
 | `--accent` | template default | Accent color as a hex value (`#2563eb`) or a name (`blue`, `teal`, `rose`, ...). |
 | `--paper` | `a4` | Page size: `a3`–`a6`, `iso-b5`, `jis-b5`, `us-letter`, `us-legal`, `us-tabloid`. |
+| `--margin` | template default | Page margin: `tight`, `normal`, `wide`, or a measurement such as `2cm`, `0.8in`, `18mm`. |
+| `--align` | template default | How body text sits in the measure: `justify`, `left`, `right`, `center`. |
+| `--no-toc` | off | Leave out the generated table of contents, for a document that carries its own. |
 | `--bib` | auto-detect `refs.bib` | Path to a custom `.bib` file for the bibliography. |
 | `--pdf-standard` | off | Write an archival PDF/A file: `a-2b` or `a-3b`. |
 | `--code-theme` | Typst default | Syntax highlighting theme: `github`, `solarized`, `monochrome`, or a path to a `.tmTheme`. |
@@ -247,7 +250,7 @@ accent: teal
 ```
 
 Supported keys: `title`, `subtitle`, `author`, `date`, `template`, `accent`,
-`paper`, and `bib`. A flag passed on the command line overrides the matching front-matter key,
+`paper`, `margin`, `align`, `toc`, and `bib`. A flag passed on the command line overrides the matching front-matter key,
 which in turn overrides the auto-detected value.
 
 ---
@@ -447,6 +450,9 @@ Every key it understands:
 | `branding` | `false` hides the `doc-engine` attribution |
 | `code_theme` | `github`, `solarized`, `monochrome`, or a path to a `.tmTheme` |
 | `pdf_standard` | `a-2b` or `a-3b` |
+| `margin` | `tight`, `normal`, `wide`, or a measurement such as `2cm` |
+| `align` | `justify`, `left`, `right`, or `center` |
+| `toc` | `false` leaves out the generated table of contents |
 | `tall_images` | `fit` or `split` |
 | `fetch_images` | `true` downloads images linked by URL |
 

@@ -76,6 +76,9 @@ def compile_pdf(
     pdf_standard: str | None = None,
     code_theme: str | None = None,
     title_markup: str | None = None,
+    toc: bool = True,
+    margin: str | None = None,
+    text_align: str | None = None,
 ) -> None:
     source = template_path(template)
     if not source.exists():
@@ -113,6 +116,17 @@ def compile_pdf(
 
         accent_inject = f'rgb("{accent}")' if accent else "none"
 
+        # A template of someone else's keeps the contract it was written
+        # against: only the bundled ones are told about options added later.
+        extras: dict[str, str] = {}
+        if Path(template).suffix != ".typ":
+            if not toc:
+                extras["toc"] = "false"
+            if margin:
+                extras["margin"] = margin
+            if text_align:
+                extras["text_align"] = f'"{text_align}"'
+
         main_file = tmp / "main.typ"
         main_file.write_text(
             _build_main(
@@ -129,6 +143,7 @@ def compile_pdf(
                 theme_inject,
                 # Custom templates retain the existing string-only title contract.
                 title_markup if Path(template).suffix != ".typ" else None,
+                extras,
             ),
             encoding="utf-8",
         )
@@ -180,8 +195,10 @@ def _build_main(
     paper: str = DEFAULT_PAPER,
     theme_inject: str = "none",
     title_markup: str | None = None,
+    extras: dict[str, str] | None = None,
 ) -> str:
     title_line = f"  title_content: [{title_markup}],\n" if title_markup is not None else ""
+    extra_lines = "".join(f"  {name}: {value},\n" for name, value in (extras or {}).items())
     theme_line = f"#set raw(theme: {theme_inject})\n" if theme_inject != "none" else ""
     date_line = f'  date: "{_escape(date)}",\n' if date else ""
     return (
@@ -199,6 +216,7 @@ def _build_main(
         f"  branding: {'true' if branding else 'false'},\n"
         f'  version: "{version}",\n'
         f'  paper: "{paper}",\n'
+        f"{extra_lines}"
         ")\n\n"
         f"{body}"
     )

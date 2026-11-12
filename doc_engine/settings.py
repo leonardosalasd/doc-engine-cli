@@ -11,9 +11,25 @@ to the built-in default.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from doc_engine.compiler import DEFAULT_PAPER, DEFAULT_TEMPLATE, PAPER_SIZES
+
+# Words for the usual amounts of white space, so a document can ask for roomier
+# or tighter pages without anyone measuring anything.
+MARGINS = {"tight": "0.6in", "normal": "1in", "wide": "1.5in"}
+ALIGNMENTS = ("justify", "left", "right", "center")
+
+_MEASUREMENT = re.compile(r"^\d+(?:\.\d+)?\s*(?:pt|mm|cm|in|em)$", re.IGNORECASE)
+
+
+def margin_length(value: str) -> str | None:
+    """A Typst length for a margin written as a word or as a measurement."""
+    cleaned = value.strip().lower()
+    if cleaned in MARGINS:
+        return MARGINS[cleaned]
+    return cleaned.replace(" ", "") if _MEASUREMENT.match(cleaned) else None
 
 
 class SettingsError(Exception):
@@ -32,6 +48,9 @@ class Resolved:
     branding: bool
     fetch_images: bool
     split_tall_images: bool
+    toc: bool
+    margin: str | None
+    text_align: str | None
     warnings: tuple[str, ...] = ()
 
 
@@ -83,6 +102,22 @@ def resolve(
 
     standard = flag("pdf_standard") or setting("pdf_standard")
 
+    margin = flag("margin") or setting("margin")
+    if margin:
+        measurement = margin_length(str(margin))
+        if measurement is None:
+            raise SettingsError(
+                f"Unknown margin — {margin}. Use {', '.join(MARGINS)}, or a measurement "
+                "such as 2cm."
+            )
+        margin = measurement
+
+    alignment = flag("text_align") or setting("align")
+    if alignment:
+        alignment = str(alignment).strip().lower()
+        if alignment not in ALIGNMENTS:
+            raise SettingsError(f"Unknown alignment — {alignment}. Use {', '.join(ALIGNMENTS)}.")
+
     return Resolved(
         template=str(template),
         paper=paper,
@@ -96,5 +131,8 @@ def resolve(
         split_tall_images=(
             str(flag("tall_images") or setting("tall_images") or "fit").lower() == "split"
         ),
+        toc=not flag("no_toc") and setting("toc") != "false",
+        margin=str(margin) if margin else None,
+        text_align=str(alignment) if alignment else None,
         warnings=tuple(warnings),
     )
