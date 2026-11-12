@@ -145,6 +145,43 @@ class TestConvert:
         assert convert("") == ""
 
 
+class TestLinkTargets:
+    def test_bare_host_gets_a_scheme(self) -> None:
+        assert '#link("https://leonardosalas.dev")' in convert("[me](leonardosalas.dev)")
+        assert '#link("https://example.com/a/b")' in convert("[a](example.com/a/b)")
+
+    def test_files_and_paths_are_left_alone(self) -> None:
+        for target in ("README.md", "docs/guide.md", "./notes.txt", "/abs/path"):
+            assert f'#link("{target}")' in convert(f"[x]({target})")
+
+    def test_written_schemes_are_left_alone(self) -> None:
+        assert '#link("mailto:a@b.com")' in convert("[m](mailto:a@b.com)")
+        assert '#link("https://x.dev")' in convert("[s](https://x.dev)")
+
+    def test_a_local_file_is_not_mistaken_for_a_host(self, tmp_path) -> None:
+        (tmp_path / "data.sqlite").write_text("x")
+        result = convert("[db](data.sqlite)", base_dir=tmp_path)
+        assert '#link("data.sqlite")' in result
+
+    def test_headings_are_labelled_and_reachable(self) -> None:
+        result = convert("## Mi Sección\n\n[ir](#mi-sección)")
+        assert "== Mi Sección <h-mi-sección>" in result
+        assert "#link(<h-mi-sección>)[ir]" in result
+
+    def test_repeated_headings_get_their_own_anchors(self) -> None:
+        result = convert("## Setup\n\n## Setup\n\n[a](#setup)\n\n[b](#setup-1)")
+        assert "<h-setup>" in result
+        assert "<h-setup-1>" in result
+        assert "#link(<h-setup>)[a]" in result
+        assert "#link(<h-setup-1>)[b]" in result
+
+    def test_an_anchor_with_no_heading_warns_instead_of_linking(self) -> None:
+        result = convert_document("[nope](#missing)")
+        assert "#link" not in result.body
+        assert "nope" in result.body
+        assert result.warnings == ["no heading matches #missing"]
+
+
 class TestTaskLists:
     def test_checked_and_unchecked_render_boxes(self) -> None:
         result = convert("- [x] done\n- [ ] todo\n")
@@ -353,7 +390,10 @@ class TestAlerts:
 class TestFormattedTitle:
     def test_title_uses_body_plugins_and_citations(self) -> None:
         for inline in ("~~struck~~ title", "The $x^2$ theorem", "Result [@smith2020]"):
-            assert extract_title_markup(f"# {inline}") == convert(f"# {inline}").strip()[2:]
+            # A body heading carries the anchor links reach it by; a title,
+            # which nothing links to, does not.
+            heading = convert(f"# {inline}").strip()[2:].rsplit(" <", 1)[0]
+            assert extract_title_markup(f"# {inline}") == heading
 
     def test_plugin_metadata_is_plain(self) -> None:
         assert extract_title("# ~~Old~~ $x^2$ result") == "Old x^2 result"

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 import mistune
 
@@ -46,6 +47,14 @@ _BLOCK_MATH = r"^ {0,3}\$\$[ \t]*\n(?P<math_text>[\s\S]+?)\n\$\$[ \t]*$"
 _INLINE_MATH = r"\$(?!\s)(?P<math_text>(?:[^$\\\n]|\\.)+?)(?<!\s)\$(?!\d)"
 _REMOTE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:)?//", re.IGNORECASE)
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
+_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.IGNORECASE)
+_HOST = re.compile(r"^[\w-]+(?:\.[\w-]+)+(?=$|[/?#])")
+_FILE_SUFFIX = re.compile(
+    r"\.(?:md|markdown|txt|rst|html?|pdf|png|jpe?g|gif|svg|webp|csv|json|ya?ml|toml"
+    r"|zip|gz|tar|docx?|xlsx?|pptx?|mp4|mov|py|js|ts|sh)$",
+    re.IGNORECASE,
+)
+_SLUG_STRIP = re.compile(r"[^\w\s-]")
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _BACKTICKS = re.compile(r"`+")
 _SETEXT_H1 = re.compile(r"^ {0,3}=+[ \t]*$")
@@ -94,6 +103,18 @@ def _math_plugin(md: mistune.Markdown) -> None:
 
     md.block.register("block_math", _BLOCK_MATH, parse_block, before="list")
     md.inline.register("inline_math", _INLINE_MATH, parse_inline, before="link")
+
+
+def _plain_text(tokens: list[dict]) -> str:
+    return "".join(
+        _plain_text(token["children"]) if "children" in token else token.get("raw", "")
+        for token in tokens
+    )
+
+
+def _slug(text: str) -> str:
+    """The anchor a heading answers to, named the way GitHub names it."""
+    return _SLUG_STRIP.sub("", text.strip().lower()).replace(" ", "-").strip("-")
 
 
 def _css_length(value: str | None) -> str | None:
@@ -179,6 +200,10 @@ class TypstRenderer(mistune.BaseRenderer):
         self._anchors = {Path(k).resolve(): v for k, v in (anchors or {}).items()}
         self.warnings: list[str] = []
         self._footnotes: dict[str, str] = {}
+        # Labels for this document's own headings, in the order they appear, and
+        # the slugs that reach them, so `[text](#a-heading)` lands somewhere.
+        self._heading_labels: list[str] = []
+        self._heading_targets: dict[str, str] = {}
         self._asset_names: dict[str, str] = {}
         self._cut_pieces: dict[str, list[str]] = {}
         self.assets: dict[str, str] = {}
@@ -203,15 +228,41 @@ class TypstRenderer(mistune.BaseRenderer):
         anchor = self._anchor_for(url)
         if anchor:
             return f"#link(<{anchor}>)[{children}]"
-        return f'#link("{url}")[{children}]'
+        if url.startswith("#"):
+            # Linking it anyway produces a link to a file that is not there, and
+            # readers report that as an error rather than as a dead link.
+            self.warnings.append(f"no heading matches {url}")
+            return children
+        return f'#link("{self._web_url(url)}")[{children}]'
+
+    def _web_url(self, url: str) -> str:
+        """Give a bare host the scheme a PDF reader needs in order to open it.
+
+        `[text](example.com)` is a relative path as far as Markdown is
+        concerned, so the reader looks for a file sitting beside the PDF and
+        reports that it cannot open it. A target that is plainly a host, and not
+        a file this build can see, is a web address the author wrote in short.
+        """
+        if _SCHEME.match(url) or url.startswith(("/", "#", "./", "../")):
+            return url
+        host = _HOST.match(url)
+        if not host or _FILE_SUFFIX.search(host.group(0)):
+            return url
+        if self._base_dir is not None and (self._base_dir / url).exists():
+            return url
+        return f"https://{url}"
 
     def _anchor_for(self, url: str) -> str | None:
-        """An anchor when this link points at another file in the same build.
+        """An anchor when this link points somewhere inside the same build.
 
-        Linking to a sibling document is normal in a folder of Markdown, but the
-        reader of the PDF has no such file, so the link jumps within the document
-        instead.
+        Linking to a heading, or to a sibling document in a folder of Markdown,
+        is normal to write and meaningless to a reader holding only the PDF, so
+        both jump within the document instead.
         """
+        if url.startswith("#"):
+            # The parser percent-encodes what it reads, so an accented heading
+            # arrives here unrecognizable unless it is decoded first.
+            return self._heading_targets.get(_slug(unquote(url[1:])))
         if not self._anchors or self._base_dir is None or _REMOTE.match(url):
             return None
         target = url.split("#", 1)[0]
@@ -325,7 +376,28 @@ class TypstRenderer(mistune.BaseRenderer):
     def heading(self, token: dict, state: Any) -> str:
         level = token["attrs"]["level"]
         body = _render_children(self, token, state)
-        return f"\n{'=' * level} {body}\n\n"
+        label = self._heading_labels.pop(0) if self._heading_labels else ""
+        return f"\n{'=' * level} {body}{f' <{label}>' if label else ''}\n\n"
+
+    def load_headings(self, tokens: list[dict]) -> None:
+        """Name every heading before rendering, so links can be resolved.
+
+        Typst refuses a link to a label that does not exist, so a target has to
+        be known to be there before one is written.
+        """
+        taken: dict[str, int] = {}
+        for token in tokens:
+            if token.get("type") != "heading":
+                continue
+            slug = _slug(_plain_text(token.get("children", [])))
+            if not slug:
+                slug = f"heading-{len(self._heading_labels) + 1}"
+            seen = taken.get(slug, 0)
+            taken[slug] = seen + 1
+            unique = slug if not seen else f"{slug}-{seen}"
+            label = f"{self._namespace}h-{unique}"
+            self._heading_labels.append(label)
+            self._heading_targets.setdefault(unique, label)
 
     def block_code(self, token: dict, state: Any) -> str:
         info = token.get("attrs", {}).get("info", "") or ""
@@ -513,6 +585,7 @@ def _parse_markdown(markdown: str) -> tuple[list[dict], Any]:
 
 
 def _render_markdown_tokens(renderer: TypstRenderer, tokens: list[dict], state: Any) -> str:
+    renderer.load_headings(tokens)
     renderer.load_footnotes(tokens, state)
     return _CITATION.sub(r"@\1", renderer.render_tokens(tokens, state))
 
