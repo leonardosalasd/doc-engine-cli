@@ -22,6 +22,23 @@ jobs:
       - name: Install build tools
         run: python -m pip install --upgrade pip build twine
 
+      # PyPI renders the README on its own page, where a relative path resolves
+      # to nothing and every screenshot comes out broken. The repository keeps
+      # the relative paths, because that is what lets doc-engine embed its own
+      # images when it builds this file, and the copy that ships points at raw
+      # GitHub instead.
+      - name: Point README images at raw GitHub
+        run: |
+          python - <<'PY'
+          import pathlib, re
+          raw = "https://raw.githubusercontent.com/${{ github.repository }}/main/"
+          readme = pathlib.Path("README.md")
+          text = readme.read_text(encoding="utf-8")
+          text = re.sub(r'(<img[^>]*\ssrc=")(?!https?://)(assets/)', rf'\1{raw}\2', text)
+          text = re.sub(r'(!\[[^\]]*\]\()(?!https?://)(assets/)', rf'\1{raw}\2', text)
+          readme.write_text(text, encoding="utf-8")
+          PY
+
       - name: Build package (sdist & wheel)
         run: python -m build
 
