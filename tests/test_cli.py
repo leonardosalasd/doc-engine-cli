@@ -106,6 +106,53 @@ class TestDryRun:
         assert "No issues found" in result.output
 
 
+class TestDiscovery:
+    def _folder(self, tmp_path, *names: str) -> None:
+        for name in names:
+            (tmp_path / name).write_text(f"# {name}\n\nBody.\n")
+
+    def test_without_a_readme_the_first_file_wins(self, tmp_path, monkeypatch) -> None:
+        self._folder(tmp_path, "tarea.md", "informe.md", "zeta.md")
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["build", "--dry-run"])
+        assert result.exit_code == 0
+        assert "informe.md" in result.output
+
+    def test_a_readme_still_wins(self, tmp_path, monkeypatch) -> None:
+        self._folder(tmp_path, "aaa.md", "README.md")
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["build", "--dry-run"])
+        assert "README.md" in result.output
+
+    def test_an_empty_folder_still_explains_itself(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["build", "--dry-run"])
+        assert result.exit_code == 1
+        assert "Nothing to build" in " ".join(result.output.split())
+
+    def test_all_checks_every_file(self, tmp_path, monkeypatch) -> None:
+        self._folder(tmp_path, "one.md", "two.md")
+        (tmp_path / "three.md").write_text("# Three\n\nA [broken]() link.\n")
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["build", "--all", "--dry-run"])
+        assert result.exit_code == 1
+        assert "three.md" in result.output
+
+    def test_all_refuses_a_single_output_name(self, tmp_path, monkeypatch) -> None:
+        self._folder(tmp_path, "one.md")
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["build", "--all", "-o", "out.pdf"])
+        assert result.exit_code == 1
+        assert "--output" in result.output
+
+    def test_all_refuses_to_watch(self, tmp_path, monkeypatch) -> None:
+        self._folder(tmp_path, "one.md")
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["build", "--all", "--watch"])
+        assert result.exit_code == 1
+        assert "--watch" in result.output
+
+
 class TestAccentValidation:
     def test_named_accent_is_accepted(self, tmp_path) -> None:
         good = tmp_path / "doc.md"

@@ -152,7 +152,7 @@ doc-engine --help               Show all commands and flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `INPUT_FILE` | auto-detect `README.md` | Path to the Markdown file to convert. |
+| `INPUT_FILE` | auto-detect | Path to the Markdown file to convert, or a folder to look in. Left out, the build takes a `doc-engine.md` manifest, then a `README.md`, then the first `.md` in the folder alphabetically. |
 | `-o, --output` | `<input>_doc.pdf` | Output PDF path. |
 | `-t, --title` | first `# heading` | Document title override. |
 | `-s, --subtitle` | none | Subtitle shown under the title on the cover. |
@@ -170,6 +170,7 @@ doc-engine --help               Show all commands and flags
 | `--dry-run` | off | Check the Markdown for errors and exit without writing a PDF. |
 | `-w, --watch` | off | Rebuild automatically whenever the source file changes. |
 | `-f, --force` | off | Overwrite the output file instead of writing a numbered copy. |
+| `--all` | off | Build every Markdown file in the folder into its own PDF, rather than one document. |
 | `--open` | off | Open the PDF after it is generated. |
 
 Any flag can also be set in the front matter (see below); a flag on the command line always wins.

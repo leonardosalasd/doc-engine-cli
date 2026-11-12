@@ -90,6 +90,14 @@ def _find_file(directory: Path, candidates: tuple[str, ...]) -> Path | None:
     return None
 
 
+def _markdown_files(directory: Path) -> list[Path]:
+    """Every Markdown file in a folder, in the order a file listing shows them."""
+    return sorted(
+        (path for path in directory.glob("*.md") if path.is_file()),
+        key=lambda path: path.name.lower(),
+    )
+
+
 def _accent_hex(value: str) -> str | None:
     key = value.strip().lower()
     if key in _NAMED_ACCENTS:
@@ -258,6 +266,12 @@ def cli(ctx: click.Context) -> None:
     is_flag=True,
     help="Overwrite the output file instead of writing a new one.",
 )
+@click.option(
+    "--all",
+    "build_all",
+    is_flag=True,
+    help="Build every Markdown file in the folder into its own PDF.",
+)
 @click.option("--open", "open_pdf", is_flag=True, help="Open the PDF after generation.")
 def build(
     input_file: str | None,
@@ -278,6 +292,7 @@ def build(
     dry_run: bool,
     watch: bool,
     force: bool,
+    build_all: bool,
     open_pdf: bool,
 ) -> None:
     """Convert a Markdown file into a professional PDF document."""
@@ -299,27 +314,56 @@ def build(
     if project:
         console.print(f"  [dim]Settings:[/dim] [cyan]{config.CONFIG_NAME}[/cyan]")
 
-    if input_file:
-        input_path = Path(input_file)
+    folder = Path(input_file) if input_file and Path(input_file).is_dir() else cwd
+
+    if build_all:
+        if watch:
+            console.print("[bold red]Error:[/bold red] --all cannot be combined with --watch.")
+            raise SystemExit(1)
+        if output:
+            console.print(
+                "[bold red]Error:[/bold red] --all writes one PDF per file, so --output "
+                "has nothing to name."
+            )
+            raise SystemExit(1)
+        targets = _markdown_files(folder)
+        if not targets:
+            console.print(f"[bold red]Error:[/bold red] No Markdown files in {folder}.")
+            raise SystemExit(1)
+    elif input_file and folder == cwd:
+        targets = [Path(input_file)]
     else:
-        input_path = manifest.find(cwd) or _find_file(cwd, _README_CANDIDATES)
-        if not input_path:
+        found = (
+            manifest.find(folder)
+            or _find_file(folder, _README_CANDIDATES)
+            # A folder of notes rarely has a README, and refusing to build one
+            # is less useful than picking the file a listing would show first.
+            or next(iter(_markdown_files(folder)), None)
+        )
+        if not found:
             console.print(
                 "[bold red]Error:[/bold red] Nothing to build in this directory.\n"
-                "[dim]Add a README.md, write a doc-engine.md manifest, "
+                "[dim]Add a Markdown file, write a doc-engine.md manifest, "
                 "or name a file to convert.[/dim]"
             )
             raise SystemExit(1)
-        console.print(f"  [dim]Auto-detected:[/dim] [cyan]{input_path.name}[/cyan]")
+        targets = [found]
+        console.print(f"  [dim]Auto-detected:[/dim] [cyan]{found.name}[/cyan]")
 
-    if not input_path.exists():
-        console.print(f"[bold red]Error:[/bold red] File not found — {input_path}")
-        raise SystemExit(1)
+    for target in targets:
+        if not target.exists():
+            console.print(f"[bold red]Error:[/bold red] File not found — {target}")
+            raise SystemExit(1)
+
+    input_path = targets[0]
 
     if dry_run:
-        issues = lint(input_path.read_text(encoding="utf-8"))
+        issues = []
+        for target in targets:
+            found_here = lint(target.read_text(encoding="utf-8"))
+            _print_issues(found_here, str(target))
+            issues.extend(found_here)
         if issues:
-            _print_issues(issues, str(input_path))
             errors = sum(1 for i in issues if i.severity == "error")
             console.print(f"\n[dim]{errors} error(s), {len(issues) - errors} warning(s).[/dim]")
             raise SystemExit(1 if errors else 0)
@@ -339,11 +383,11 @@ def build(
         "tall_images": tall_images,
     }
 
-    output_path = Path(output) if output else Path(f"{input_path.stem}_doc.pdf")
-    if not force:
-        output_path = _unique_path(output_path)
+    def destination(source: Path) -> Path:
+        path = Path(output) if output else Path(f"{source.stem}_doc.pdf")
+        return path if force else _unique_path(path)
 
-    def run() -> bool:
+    def run(input_path: Path, output_path: Path) -> bool:
         collected: manifest.Manifest | None = None
         if manifest.is_manifest(input_path):
             try:
@@ -487,14 +531,27 @@ def build(
         )
         return True
 
-    ok = run()
+    # Named once per file: a rebuild under --watch has to overwrite what it
+    # wrote a moment ago rather than number a new copy beside it.
+    outputs = {target: destination(target) for target in targets}
+    built: list[Path] = []
+    failed = False
+    for target in targets:
+        if run(target, outputs[target]):
+            built.append(outputs[target])
+        else:
+            failed = True
 
-    if open_pdf and ok:
-        _open_file(str(output_path))
+    if len(targets) > 1:
+        console.print(f"\n[dim]{len(built)} of {len(targets)} file(s) built.[/dim]")
+
+    if open_pdf:
+        for path in built:
+            _open_file(str(path))
 
     if watch:
-        _watch(input_path, run)
-    elif not ok:
+        _watch(input_path, lambda: run(input_path, outputs[input_path]))
+    elif failed:
         raise SystemExit(1)
 
 
