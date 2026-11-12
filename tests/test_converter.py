@@ -300,6 +300,25 @@ class TestHtmlImages:
         assert convert("a<br>b") == "a\\\nb\n\n"
 
 
+class TestPageBreaks:
+    def test_text_sticks_to_the_picture_it_introduces(self, tmp_path) -> None:
+        (tmp_path / "shot.png").write_bytes(b"image")
+        result = convert("Then you take the photo\n\n![shot](shot.png)\n", base_dir=tmp_path)
+        assert "#block(sticky: true)[Then you take the photo]" in result
+
+    def test_a_lone_paragraph_is_left_alone(self) -> None:
+        assert "sticky" not in convert("Just a sentence.\n\nAnd another.\n")
+
+    def test_a_picture_does_not_stick_to_the_next_one(self, tmp_path) -> None:
+        (tmp_path / "a.png").write_bytes(b"image")
+        result = convert("![one](a.png)\n\n![two](a.png)\n", base_dir=tmp_path)
+        assert "sticky" not in result
+
+    def test_an_alert_keeps_its_label(self) -> None:
+        result = convert("> [!WARNING]\n> Mind the gap.\n")
+        assert "#block(sticky: true)[#text(weight: 700" in result
+
+
 class TestImages:
     def test_local_image_is_embedded(self, tmp_path) -> None:
         (tmp_path / "logo.png").write_bytes(b"\x89PNG\r\n")

@@ -57,6 +57,7 @@ _FILE_SUFFIX = re.compile(
 _SLUG_STRIP = re.compile(r"[^\w\s-]")
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _BACKTICKS = re.compile(r"`+")
+_OPENS_WITH_IMAGE = re.compile(r"^\s*(?:#align\([^)]*\)\[)?#fit-image\(")
 _SETEXT_H1 = re.compile(r"^ {0,3}=+[ \t]*$")
 
 # Pandoc-style [@key] survives escaping as \[\@key\]; restore it as a Typst @key.
@@ -373,6 +374,28 @@ class TypstRenderer(mistune.BaseRenderer):
         body = _render_children(self, token, state).strip()
         return f"{body}\n\n" if body else ""
 
+    def render_tokens(self, tokens: list[dict], state: Any) -> str:
+        """Render a run of blocks, keeping text with the picture it introduces.
+
+        A picture that does not fit what is left of the page moves to the next
+        one on its own, and the sentence that announces it stays behind above a
+        column of empty paper. Asking the sentence to travel with the picture
+        puts them back together, which is how they were written.
+        """
+        rendered = [self.render_token(token, state) for token in tokens]
+        for index, token in enumerate(tokens):
+            if token.get("type") != "paragraph" or _OPENS_WITH_IMAGE.match(rendered[index]):
+                continue
+            # Blank lines are tokens of their own, so the picture is not
+            # necessarily the very next thing rendered.
+            following = next(
+                (chunk for chunk in rendered[index + 1 :] if chunk.strip()),
+                "",
+            )
+            if _OPENS_WITH_IMAGE.match(following):
+                rendered[index] = f"#block(sticky: true)[{rendered[index].strip()}]\n\n"
+        return "".join(rendered)
+
     def heading(self, token: dict, state: Any) -> str:
         level = token["attrs"]["level"]
         body = _render_children(self, token, state)
@@ -441,7 +464,9 @@ class TypstRenderer(mistune.BaseRenderer):
             f'  fill: rgb("{color}").lighten(92%),\n'
             "  radius: (right: 3pt),\n"
             ")[\n"
-            f'  #text(weight: 700, fill: rgb("{color}"))[{label}]\n'
+            # The label travels with the first line of the alert, so a page
+            # break cannot leave a lone "Warning" at the bottom of a page.
+            f'  #block(sticky: true)[#text(weight: 700, fill: rgb("{color}"))[{label}]]\n'
             "  #v(0.35em, weak: true)\n"
             f"  {body}\n"
             "]\n\n"

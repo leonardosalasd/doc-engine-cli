@@ -144,6 +144,11 @@ def compile_pdf(
 # Forcing every image to full width blows up small diagrams, and constraining
 # only the width lets a tall one run past the bottom of the page, where Typst
 # clips whatever does not fit.
+#
+# The height they are allowed stops short of the whole text block. A portrait
+# photograph scaled to the last millimetre leaves no room for the sentence that
+# introduces it, so the sentence is stranded on the page before, and asking the
+# two to travel together cannot help when together they do not fit anywhere.
 _FIT_IMAGE = """#let fit-image(path, width: none, height: none) = context layout(area => {
   let img = if width != none and height != none {
     image(path, width: width, height: height, fit: "contain")
@@ -155,7 +160,8 @@ _FIT_IMAGE = """#let fit-image(path, width: none, height: none) = context layout
     image(path)
   }
   let natural = measure(img)
-  let scale = calc.min(1.0, area.width / natural.width, area.height / natural.height)
+  let room = area.height * 0.88
+  let scale = calc.min(1.0, area.width / natural.width, room / natural.height)
   if scale >= 1.0 { img } else { image(path, width: natural.width * scale) }
 })
 """
