@@ -319,6 +319,43 @@ class TestPageBreaks:
         assert "#block(sticky: true)[#text(weight: 700" in result
 
 
+class TestHtmlAlignment:
+    def test_a_centered_block_wraps_what_it_holds(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"image")
+        result = convert(
+            '<div align="center">\n\n![logo](logo.png)\n\nCaption.\n\n</div>',
+            base_dir=tmp_path,
+        )
+        assert result.strip().startswith("#align(center)[")
+        assert result.strip().endswith("]")
+        assert "Caption." in result
+
+    def test_a_self_contained_block_works_too(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"image")
+        result = convert('<div align="center"><img src="logo.png"></div>', base_dir=tmp_path)
+        assert result.strip().startswith("#align(center)[")
+        assert "#fit-image(" in result
+
+    def test_right_and_left_are_honored(self) -> None:
+        assert "#align(right)[" in convert('<div align="right">\n\nx\n\n</div>')
+        assert "#align(left)[" in convert('<div align="left">\n\nx\n\n</div>')
+
+    def test_the_legacy_center_tag_counts(self) -> None:
+        assert "#align(center)[" in convert("<center>\n\nx\n\n</center>")
+
+    def test_a_plain_div_changes_nothing(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"image")
+        result = convert("<div>\n\n![logo](logo.png)\n\n</div>", base_dir=tmp_path)
+        assert "#align" not in result
+
+    def test_an_unclosed_block_is_closed_anyway(self) -> None:
+        result = convert('<div align="center">\n\nNothing closes this.\n')
+        assert result.count("#align(center)[") == result.count("]")
+
+    def test_an_unknown_alignment_is_ignored(self) -> None:
+        assert "#align" not in convert('<div align="sideways">\n\nx\n\n</div>')
+
+
 class TestImages:
     def test_local_image_is_embedded(self, tmp_path) -> None:
         (tmp_path / "logo.png").write_bytes(b"\x89PNG\r\n")

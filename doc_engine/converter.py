@@ -58,6 +58,7 @@ _SLUG_STRIP = re.compile(r"[^\w\s-]")
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _BACKTICKS = re.compile(r"`+")
 _OPENS_WITH_IMAGE = re.compile(r"^\s*(?:#align\([^)]*\)\[)?#fit-image\(")
+_ALIGN_VALUES = {"center": "center", "right": "right", "left": "left"}
 _SETEXT_H1 = re.compile(r"^ {0,3}=+[ \t]*$")
 
 # Pandoc-style [@key] survives escaping as \[\@key\]; restore it as a Typst @key.
@@ -177,6 +178,26 @@ class _ImageParser(HTMLParser):
             self.images.append(dict(attrs))
 
 
+class _BlockParser(HTMLParser):
+    """Tags in the order they were written, which is what alignment needs.
+
+    A `<div align="center">` and its closing tag often arrive as two separate
+    blocks with the content between them parsed as Markdown, so the opening and
+    the closing have to be emitted where they were found rather than matched up
+    inside one piece of HTML.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.events: list[tuple[str, str, dict[str, str | None]]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.events.append(("start", tag, dict(attrs)))
+
+    def handle_endtag(self, tag: str) -> None:
+        self.events.append(("end", tag, {}))
+
+
 class TypstRenderer(mistune.BaseRenderer):
     NAME = "typst"
 
@@ -205,6 +226,9 @@ class TypstRenderer(mistune.BaseRenderer):
         # the slugs that reach them, so `[text](#a-heading)` lands somewhere.
         self._heading_labels: list[str] = []
         self._heading_targets: dict[str, str] = {}
+        # Elements holding the document open inside an #align, since the tag
+        # that opens one and the tag that closes it arrive separately.
+        self._alignment: list[str] = []
         self._asset_names: dict[str, str] = {}
         self._cut_pieces: dict[str, list[str]] = {}
         self.assets: dict[str, str] = {}
@@ -338,19 +362,19 @@ class TypstRenderer(mistune.BaseRenderer):
         parser = _ImageParser()
         parser.feed(token.get("raw", ""))
         parser.close()
-        return "\n".join(
-            self.image(
-                {
-                    "attrs": {
-                        "url": attrs.get("src") or "",
-                        "width": attrs.get("width"),
-                        "height": attrs.get("height"),
-                    },
-                    "children": [{"type": "text", "raw": attrs.get("alt") or ""}],
+        return "\n".join(self._html_image(attrs, state) for attrs in parser.images)
+
+    def _html_image(self, attrs: dict[str, str | None], state: Any) -> str:
+        return self.image(
+            {
+                "attrs": {
+                    "url": attrs.get("src") or "",
+                    "width": attrs.get("width"),
+                    "height": attrs.get("height"),
                 },
-                state,
-            )
-            for attrs in parser.images
+                "children": [{"type": "text", "raw": attrs.get("alt") or ""}],
+            },
+            state,
         )
 
     def inline_math(self, token: dict, state: Any) -> str:
@@ -499,8 +523,33 @@ class TypstRenderer(mistune.BaseRenderer):
         return '\n#line(length: 100%, stroke: 0.5pt + rgb("#d0d0d0"))\n\n'
 
     def block_html(self, token: dict, state: Any) -> str:
-        body = self._html_images(token, state)
-        return f"{body}\n\n" if body else ""
+        parser = _BlockParser()
+        parser.feed(token.get("raw", ""))
+        parser.close()
+
+        pieces: list[str] = []
+        for kind, tag, attrs in parser.events:
+            if kind == "start" and tag == "img":
+                pieces.append(self._html_image(attrs, state))
+            elif kind == "start":
+                alignment = _ALIGN_VALUES.get(
+                    "center" if tag == "center" else (attrs.get("align") or "").strip().lower()
+                )
+                if alignment:
+                    self._alignment.append(tag)
+                    pieces.append(f"#align({alignment})[\n")
+            elif self._alignment and self._alignment[-1] == tag:
+                self._alignment.pop()
+                pieces.append("\n]")
+
+        body = "".join(pieces)
+        return f"{body}\n\n" if body.strip() else ""
+
+    def close_alignment(self) -> str:
+        """Close anything the document opened and never closed."""
+        closing = "\n]" * len(self._alignment)
+        self._alignment.clear()
+        return closing
 
     def footnotes(self, token: dict, state: Any) -> str:
         return ""
@@ -612,7 +661,8 @@ def _parse_markdown(markdown: str) -> tuple[list[dict], Any]:
 def _render_markdown_tokens(renderer: TypstRenderer, tokens: list[dict], state: Any) -> str:
     renderer.load_headings(tokens)
     renderer.load_footnotes(tokens, state)
-    return _CITATION.sub(r"@\1", renderer.render_tokens(tokens, state))
+    body = renderer.render_tokens(tokens, state) + renderer.close_alignment()
+    return _CITATION.sub(r"@\1", body)
 
 
 def convert_document(

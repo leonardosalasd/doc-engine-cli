@@ -609,6 +609,7 @@ The converter module parses Markdown using [`mistune`](https://github.com/leptur
 | `text[^1]` | `#footnote[...]` |
 | `![alt](local.png)` | `#image("local.png")` |
 | `<img src="local.png" width="300">` | Embedded image, using the same path as Markdown images |
+| `<div align="center">` | `#align(center)[...]` around everything up to the closing tag |
 | `> blockquote` | `#block(...)` |
 | `---` | `#line(...)` |
 
@@ -747,6 +748,7 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build
 - [x] Footnotes (`[^1]`)
 - [x] Local images, and remote ones with `--fetch-images`
 - [x] Raw HTML `<img>` tags (inline or block), sized by `width` and `height` in pixels
+- [x] `align` on a raw HTML block (`<div align="center">`, `<center>`)
 - [x] Math blocks (LaTeX `$…$` and `$$…$$`)
 - [x] Mermaid and SVG diagram blocks
 - [x] GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`)
