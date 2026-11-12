@@ -47,6 +47,7 @@ _INLINE_MATH = r"\$(?!\s)(?P<math_text>(?:[^$\\\n]|\\.)+?)(?<!\s)\$(?!\d)"
 _REMOTE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:)?//", re.IGNORECASE)
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_BACKTICKS = re.compile(r"`+")
 _SETEXT_H1 = re.compile(r"^ {0,3}=+[ \t]*$")
 
 # Pandoc-style [@key] survives escaping as \[\@key\]; restore it as a Typst @key.
@@ -332,7 +333,10 @@ class TypstRenderer(mistune.BaseRenderer):
         code = token["raw"]
         if lang and diagrams.is_diagram(lang):
             return self._render_diagram(lang, code)
-        return f"\n```{lang}\n{code}```\n\n"
+        # Typst closes raw text at the first run of backticks that matches the
+        # one it opened with, so code holding its own fence needs a longer one.
+        fence = "`" * max(3, len(max(_BACKTICKS.findall(code), key=len, default="")) + 1)
+        return f"\n{fence}{lang}\n{code}{fence}\n\n"
 
     def _render_diagram(self, language: str, source: str) -> str:
         svg = diagrams.render(language, source)

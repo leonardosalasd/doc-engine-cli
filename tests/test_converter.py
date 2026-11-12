@@ -109,6 +109,16 @@ class TestConvert:
         result = convert(md)
         assert "```python" in result
 
+    def test_code_block_holding_its_own_fence(self) -> None:
+        md = '````python\nif line.startswith("```"):\n    pass\n````'
+        result = convert(md)
+        assert result.startswith("\n````python\n")
+        assert result.endswith("````\n\n")
+
+    def test_fence_grows_past_the_longest_run(self) -> None:
+        md = "`````\na ```` b\n`````"
+        assert convert(md).startswith("\n`````\n")
+
     def test_link(self) -> None:
         result = convert("[click here](https://example.com)")
         assert '#link("https://example.com")' in result
