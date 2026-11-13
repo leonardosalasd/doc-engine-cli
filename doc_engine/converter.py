@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 import mistune
 
@@ -46,7 +47,18 @@ _BLOCK_MATH = r"^ {0,3}\$\$[ \t]*\n(?P<math_text>[\s\S]+?)\n\$\$[ \t]*$"
 _INLINE_MATH = r"\$(?!\s)(?P<math_text>(?:[^$\\\n]|\\.)+?)(?<!\s)\$(?!\d)"
 _REMOTE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:)?//", re.IGNORECASE)
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
+_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.IGNORECASE)
+_HOST = re.compile(r"^[\w-]+(?:\.[\w-]+)+(?=$|[/?#])")
+_FILE_SUFFIX = re.compile(
+    r"\.(?:md|markdown|txt|rst|html?|pdf|png|jpe?g|gif|svg|webp|csv|json|ya?ml|toml"
+    r"|zip|gz|tar|docx?|xlsx?|pptx?|mp4|mov|py|js|ts|sh)$",
+    re.IGNORECASE,
+)
+_SLUG_STRIP = re.compile(r"[^\w\s-]")
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_BACKTICKS = re.compile(r"`+")
+_OPENS_WITH_IMAGE = re.compile(r"^\s*(?:#align\([^)]*\)\[)?#fit-image\(")
+_ALIGN_VALUES = {"center": "center", "right": "right", "left": "left"}
 _SETEXT_H1 = re.compile(r"^ {0,3}=+[ \t]*$")
 
 # Pandoc-style [@key] survives escaping as \[\@key\]; restore it as a Typst @key.
@@ -93,6 +105,18 @@ def _math_plugin(md: mistune.Markdown) -> None:
 
     md.block.register("block_math", _BLOCK_MATH, parse_block, before="list")
     md.inline.register("inline_math", _INLINE_MATH, parse_inline, before="link")
+
+
+def _plain_text(tokens: list[dict]) -> str:
+    return "".join(
+        _plain_text(token["children"]) if "children" in token else token.get("raw", "")
+        for token in tokens
+    )
+
+
+def _slug(text: str) -> str:
+    """The anchor a heading answers to, named the way GitHub names it."""
+    return _SLUG_STRIP.sub("", text.strip().lower()).replace(" ", "-").strip("-")
 
 
 def _css_length(value: str | None) -> str | None:
@@ -154,6 +178,26 @@ class _ImageParser(HTMLParser):
             self.images.append(dict(attrs))
 
 
+class _BlockParser(HTMLParser):
+    """Tags in the order they were written, which is what alignment needs.
+
+    A `<div align="center">` and its closing tag often arrive as two separate
+    blocks with the content between them parsed as Markdown, so the opening and
+    the closing have to be emitted where they were found rather than matched up
+    inside one piece of HTML.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.events: list[tuple[str, str, dict[str, str | None]]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.events.append(("start", tag, dict(attrs)))
+
+    def handle_endtag(self, tag: str) -> None:
+        self.events.append(("end", tag, {}))
+
+
 class TypstRenderer(mistune.BaseRenderer):
     NAME = "typst"
 
@@ -178,6 +222,13 @@ class TypstRenderer(mistune.BaseRenderer):
         self._anchors = {Path(k).resolve(): v for k, v in (anchors or {}).items()}
         self.warnings: list[str] = []
         self._footnotes: dict[str, str] = {}
+        # Labels for this document's own headings, in the order they appear, and
+        # the slugs that reach them, so `[text](#a-heading)` lands somewhere.
+        self._heading_labels: list[str] = []
+        self._heading_targets: dict[str, str] = {}
+        # Elements holding the document open inside an #align, since the tag
+        # that opens one and the tag that closes it arrive separately.
+        self._alignment: list[str] = []
         self._asset_names: dict[str, str] = {}
         self._cut_pieces: dict[str, list[str]] = {}
         self.assets: dict[str, str] = {}
@@ -202,15 +253,41 @@ class TypstRenderer(mistune.BaseRenderer):
         anchor = self._anchor_for(url)
         if anchor:
             return f"#link(<{anchor}>)[{children}]"
-        return f'#link("{url}")[{children}]'
+        if url.startswith("#"):
+            # Linking it anyway produces a link to a file that is not there, and
+            # readers report that as an error rather than as a dead link.
+            self.warnings.append(f"no heading matches {url}")
+            return children
+        return f'#link("{self._web_url(url)}")[{children}]'
+
+    def _web_url(self, url: str) -> str:
+        """Give a bare host the scheme a PDF reader needs in order to open it.
+
+        `[text](example.com)` is a relative path as far as Markdown is
+        concerned, so the reader looks for a file sitting beside the PDF and
+        reports that it cannot open it. A target that is plainly a host, and not
+        a file this build can see, is a web address the author wrote in short.
+        """
+        if _SCHEME.match(url) or url.startswith(("/", "#", "./", "../")):
+            return url
+        host = _HOST.match(url)
+        if not host or _FILE_SUFFIX.search(host.group(0)):
+            return url
+        if self._base_dir is not None and (self._base_dir / url).exists():
+            return url
+        return f"https://{url}"
 
     def _anchor_for(self, url: str) -> str | None:
-        """An anchor when this link points at another file in the same build.
+        """An anchor when this link points somewhere inside the same build.
 
-        Linking to a sibling document is normal in a folder of Markdown, but the
-        reader of the PDF has no such file, so the link jumps within the document
-        instead.
+        Linking to a heading, or to a sibling document in a folder of Markdown,
+        is normal to write and meaningless to a reader holding only the PDF, so
+        both jump within the document instead.
         """
+        if url.startswith("#"):
+            # The parser percent-encodes what it reads, so an accented heading
+            # arrives here unrecognizable unless it is decoded first.
+            return self._heading_targets.get(_slug(unquote(url[1:])))
         if not self._anchors or self._base_dir is None or _REMOTE.match(url):
             return None
         target = url.split("#", 1)[0]
@@ -285,19 +362,19 @@ class TypstRenderer(mistune.BaseRenderer):
         parser = _ImageParser()
         parser.feed(token.get("raw", ""))
         parser.close()
-        return "\n".join(
-            self.image(
-                {
-                    "attrs": {
-                        "url": attrs.get("src") or "",
-                        "width": attrs.get("width"),
-                        "height": attrs.get("height"),
-                    },
-                    "children": [{"type": "text", "raw": attrs.get("alt") or ""}],
+        return "\n".join(self._html_image(attrs, state) for attrs in parser.images)
+
+    def _html_image(self, attrs: dict[str, str | None], state: Any) -> str:
+        return self.image(
+            {
+                "attrs": {
+                    "url": attrs.get("src") or "",
+                    "width": attrs.get("width"),
+                    "height": attrs.get("height"),
                 },
-                state,
-            )
-            for attrs in parser.images
+                "children": [{"type": "text", "raw": attrs.get("alt") or ""}],
+            },
+            state,
         )
 
     def inline_math(self, token: dict, state: Any) -> str:
@@ -321,10 +398,53 @@ class TypstRenderer(mistune.BaseRenderer):
         body = _render_children(self, token, state).strip()
         return f"{body}\n\n" if body else ""
 
+    def render_tokens(self, tokens: list[dict], state: Any) -> str:
+        """Render a run of blocks, keeping text with the picture it introduces.
+
+        A picture that does not fit what is left of the page moves to the next
+        one on its own, and the sentence that announces it stays behind above a
+        column of empty paper. Asking the sentence to travel with the picture
+        puts them back together, which is how they were written.
+        """
+        rendered = [self.render_token(token, state) for token in tokens]
+        for index, token in enumerate(tokens):
+            if token.get("type") != "paragraph" or _OPENS_WITH_IMAGE.match(rendered[index]):
+                continue
+            # Blank lines are tokens of their own, so the picture is not
+            # necessarily the very next thing rendered.
+            following = next(
+                (chunk for chunk in rendered[index + 1 :] if chunk.strip()),
+                "",
+            )
+            if _OPENS_WITH_IMAGE.match(following):
+                rendered[index] = f"#block(sticky: true)[{rendered[index].strip()}]\n\n"
+        return "".join(rendered)
+
     def heading(self, token: dict, state: Any) -> str:
         level = token["attrs"]["level"]
         body = _render_children(self, token, state)
-        return f"\n{'=' * level} {body}\n\n"
+        label = self._heading_labels.pop(0) if self._heading_labels else ""
+        return f"\n{'=' * level} {body}{f' <{label}>' if label else ''}\n\n"
+
+    def load_headings(self, tokens: list[dict]) -> None:
+        """Name every heading before rendering, so links can be resolved.
+
+        Typst refuses a link to a label that does not exist, so a target has to
+        be known to be there before one is written.
+        """
+        taken: dict[str, int] = {}
+        for token in tokens:
+            if token.get("type") != "heading":
+                continue
+            slug = _slug(_plain_text(token.get("children", [])))
+            if not slug:
+                slug = f"heading-{len(self._heading_labels) + 1}"
+            seen = taken.get(slug, 0)
+            taken[slug] = seen + 1
+            unique = slug if not seen else f"{slug}-{seen}"
+            label = f"{self._namespace}h-{unique}"
+            self._heading_labels.append(label)
+            self._heading_targets.setdefault(unique, label)
 
     def block_code(self, token: dict, state: Any) -> str:
         info = token.get("attrs", {}).get("info", "") or ""
@@ -332,7 +452,10 @@ class TypstRenderer(mistune.BaseRenderer):
         code = token["raw"]
         if lang and diagrams.is_diagram(lang):
             return self._render_diagram(lang, code)
-        return f"\n```{lang}\n{code}```\n\n"
+        # Typst closes raw text at the first run of backticks that matches the
+        # one it opened with, so code holding its own fence needs a longer one.
+        fence = "`" * max(3, len(max(_BACKTICKS.findall(code), key=len, default="")) + 1)
+        return f"\n{fence}{lang}\n{code}{fence}\n\n"
 
     def _render_diagram(self, language: str, source: str) -> str:
         svg = diagrams.render(language, source)
@@ -365,7 +488,9 @@ class TypstRenderer(mistune.BaseRenderer):
             f'  fill: rgb("{color}").lighten(92%),\n'
             "  radius: (right: 3pt),\n"
             ")[\n"
-            f'  #text(weight: 700, fill: rgb("{color}"))[{label}]\n'
+            # The label travels with the first line of the alert, so a page
+            # break cannot leave a lone "Warning" at the bottom of a page.
+            f'  #block(sticky: true)[#text(weight: 700, fill: rgb("{color}"))[{label}]]\n'
             "  #v(0.35em, weak: true)\n"
             f"  {body}\n"
             "]\n\n"
@@ -398,8 +523,33 @@ class TypstRenderer(mistune.BaseRenderer):
         return '\n#line(length: 100%, stroke: 0.5pt + rgb("#d0d0d0"))\n\n'
 
     def block_html(self, token: dict, state: Any) -> str:
-        body = self._html_images(token, state)
-        return f"{body}\n\n" if body else ""
+        parser = _BlockParser()
+        parser.feed(token.get("raw", ""))
+        parser.close()
+
+        pieces: list[str] = []
+        for kind, tag, attrs in parser.events:
+            if kind == "start" and tag == "img":
+                pieces.append(self._html_image(attrs, state))
+            elif kind == "start":
+                alignment = _ALIGN_VALUES.get(
+                    "center" if tag == "center" else (attrs.get("align") or "").strip().lower()
+                )
+                if alignment:
+                    self._alignment.append(tag)
+                    pieces.append(f"#align({alignment})[\n")
+            elif self._alignment and self._alignment[-1] == tag:
+                self._alignment.pop()
+                pieces.append("\n]")
+
+        body = "".join(pieces)
+        return f"{body}\n\n" if body.strip() else ""
+
+    def close_alignment(self) -> str:
+        """Close anything the document opened and never closed."""
+        closing = "\n]" * len(self._alignment)
+        self._alignment.clear()
+        return closing
 
     def footnotes(self, token: dict, state: Any) -> str:
         return ""
@@ -509,8 +659,10 @@ def _parse_markdown(markdown: str) -> tuple[list[dict], Any]:
 
 
 def _render_markdown_tokens(renderer: TypstRenderer, tokens: list[dict], state: Any) -> str:
+    renderer.load_headings(tokens)
     renderer.load_footnotes(tokens, state)
-    return _CITATION.sub(r"@\1", renderer.render_tokens(tokens, state))
+    body = renderer.render_tokens(tokens, state) + renderer.close_alignment()
+    return _CITATION.sub(r"@\1", body)
 
 
 def convert_document(

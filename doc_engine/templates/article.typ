@@ -9,6 +9,9 @@
   branding: true,
   version: "",
   paper: "a4",
+  toc: true,
+  margin: none,
+  text_align: none,
   ..options,
   body,
 ) = {
@@ -33,7 +36,7 @@
 
   set page(
     paper: paper,
-    margin: (top: 1in, bottom: 1in, left: 1.25in, right: 1.25in),
+    margin: if margin == none { (top: 1in, bottom: 1in, left: 1.25in, right: 1.25in) } else { margin },
     footer: context {
       set text(font: serif, size: 9pt, fill: muted)
       if branding and counter(page).get().first() == 1 {
@@ -50,7 +53,8 @@
   )
 
   set text(font: serif, size: 11pt, fill: ink, lang: "en")
-  set par(justify: true, leading: 0.62em, first-line-indent: 1.5em, spacing: 0.62em)
+  set par(justify: if text_align == none { true } else { text_align == "justify" }, leading: 0.62em, first-line-indent: 1.5em, spacing: 0.62em)
+  show par: it => if text_align == "right" { align(right, it) } else if text_align == "center" { align(center, it) } else { it }
 
   // The first `#` heading becomes the document title, so a file's real sections
   // usually start at `##`. Dropping the levels that never appear keeps them
@@ -110,8 +114,10 @@
   ]
 
   set align(left)
-  outline(title: [Contents], indent: 1.2em, depth: 3)
-  v(1.5em)
+  if toc {
+    outline(title: [Contents], indent: 1.2em, depth: 3)
+    v(1.5em)
+  }
 
   body
 

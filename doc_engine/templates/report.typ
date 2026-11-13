@@ -9,6 +9,9 @@
   branding: true,
   version: "",
   paper: "a4",
+  toc: true,
+  margin: none,
+  text_align: none,
   ..options,
   body,
 ) = {
@@ -34,7 +37,7 @@
   // the range that stays comfortable to read for pages at a time.
   set page(
     paper: paper,
-    margin: (top: 1.4in, bottom: 1.4in, left: 1.6in, right: 1.6in),
+    margin: if margin == none { (top: 1.4in, bottom: 1.4in, left: 1.6in, right: 1.6in) } else { margin },
     header: context {
       if counter(page).get().first() > 1 [
         #set text(font: serif, size: 9pt, fill: muted)
@@ -63,7 +66,8 @@
   )
 
   set text(font: serif, size: 12pt, fill: ink, lang: "en")
-  set par(justify: true, leading: 0.95em, spacing: 1.5em)
+  set par(justify: if text_align == none { true } else { text_align == "justify" }, leading: 0.95em, spacing: 1.5em)
+  show par: it => if text_align == "right" { align(right, it) } else if text_align == "center" { align(center, it) } else { it }
 
   show heading: set block(above: 2.4em, below: 1.1em)
 
@@ -127,8 +131,10 @@
     v(14pt, weak: true)
     strong(it)
   }
-  outline(title: [Contents], indent: 1.6em, depth: 3)
-  pagebreak()
+  if toc {
+    outline(title: [Contents], indent: 1.6em, depth: 3)
+    pagebreak()
+  }
 
   body
 

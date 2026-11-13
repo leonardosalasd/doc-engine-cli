@@ -9,6 +9,9 @@
   branding: true,
   version: "",
   paper: "a4",
+  toc: true,
+  margin: none,
+  text_align: none,
   ..options,
   body,
 ) = {
@@ -30,7 +33,7 @@
 
   set page(
     paper: paper,
-    margin: (top: 1.1in, bottom: 1.1in, left: 1.1in, right: 1.1in),
+    margin: if margin == none { (top: 1.1in, bottom: 1.1in, left: 1.1in, right: 1.1in) } else { margin },
     header: context {
       if counter(page).get().first() > 1 [
         #set text(font: ("Cascadia Code", "DejaVu Sans Mono", "Consolas"), size: 7.5pt, fill: muted)
@@ -54,7 +57,8 @@
   )
 
   set text(font: ("Inter", "Helvetica Neue", "Arial", "Libertinus Serif"), size: 10pt, fill: ink, lang: "en")
-  set par(justify: true, leading: 0.68em, spacing: 1em)
+  set par(justify: if text_align == none { true } else { text_align == "justify" }, leading: 0.68em, spacing: 1em)
+  show par: it => if text_align == "right" { align(right, it) } else if text_align == "center" { align(center, it) } else { it }
 
   show raw.where(block: true): it => block(
     fill: surface,
@@ -128,8 +132,10 @@
     v(10pt, weak: true)
     strong(it)
   }
-  outline(title: [Contents], indent: 1.4em, depth: 3)
-  pagebreak()
+  if toc {
+    outline(title: [Contents], indent: 1.4em, depth: 3)
+    pagebreak()
+  }
 
   body
 

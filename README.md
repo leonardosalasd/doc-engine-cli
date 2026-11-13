@@ -63,7 +63,7 @@ That's it. Zero configuration required.
 | **Page Sizes** | A4 by default, plus A3–A6, ISO/JIS B5, and US letter, legal, and tabloid. |
 | **Project Config** | A `.doc-engine.toml` keeps a team's defaults out of every document. |
 | **Rich Markdown** | Embeds local images, renders GitHub task lists as real checkboxes, and turns `[^1]` footnotes into native Typst footnotes. |
-| **Error Checking** | Reports source problems with line and column before compiling. A `--dry-run` mode runs the check on its own. |
+| **Error Checking** | Reports source problems — empty links, unclosed fences, footnotes with no definition — with line and column before compiling. A `--dry-run` mode runs the check on its own. |
 | **Non-Destructive** | Never overwrites an existing PDF — writes `report (1).pdf`, `report (2).pdf`, … unless you pass `--force`. |
 | **Premium Typography** | Font stacks that end in a font Typst ships, so a document looks the same in a bare container as on a laptop. |
 | **Pure Python** | No external binaries required (no Pandoc, no LaTeX). Ships as a single `pip install`. |
@@ -152,7 +152,7 @@ doc-engine --help               Show all commands and flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `INPUT_FILE` | auto-detect `README.md` | Path to the Markdown file to convert. |
+| `INPUT_FILE` | auto-detect | Path to the Markdown file to convert, or a folder to look in. Left out, the build takes a `doc-engine.md` manifest, then a `README.md`, then the first `.md` in the folder alphabetically. |
 | `-o, --output` | `<input>_doc.pdf` | Output PDF path. |
 | `-t, --title` | first `# heading` | Document title override. |
 | `-s, --subtitle` | none | Subtitle shown under the title on the cover. |
@@ -161,6 +161,9 @@ doc-engine --help               Show all commands and flags
 | `--template` | `academic` | A built-in layout (`academic`, `article`, `book`, `minimal`, `modern`, `report`, `technical`) or a path to your own `.typ` file. |
 | `--accent` | template default | Accent color as a hex value (`#2563eb`) or a name (`blue`, `teal`, `rose`, ...). |
 | `--paper` | `a4` | Page size: `a3`–`a6`, `iso-b5`, `jis-b5`, `us-letter`, `us-legal`, `us-tabloid`. |
+| `--margin` | template default | Page margin: `tight`, `normal`, `wide`, or a measurement such as `2cm`, `0.8in`, `18mm`. |
+| `--align` | template default | How body text sits in the measure: `justify`, `left`, `right`, `center`. |
+| `--no-toc` | off | Leave out the generated table of contents, for a document that carries its own. |
 | `--bib` | auto-detect `refs.bib` | Path to a custom `.bib` file for the bibliography. |
 | `--pdf-standard` | off | Write an archival PDF/A file: `a-2b` or `a-3b`. |
 | `--code-theme` | Typst default | Syntax highlighting theme: `github`, `solarized`, `monochrome`, or a path to a `.tmTheme`. |
@@ -170,6 +173,7 @@ doc-engine --help               Show all commands and flags
 | `--dry-run` | off | Check the Markdown for errors and exit without writing a PDF. |
 | `-w, --watch` | off | Rebuild automatically whenever the source file changes. |
 | `-f, --force` | off | Overwrite the output file instead of writing a numbered copy. |
+| `--all` | off | Build every Markdown file in the folder into its own PDF, rather than one document. |
 | `--open` | off | Open the PDF after it is generated. |
 
 Any flag can also be set in the front matter (see below); a flag on the command line always wins.
@@ -246,7 +250,7 @@ accent: teal
 ```
 
 Supported keys: `title`, `subtitle`, `author`, `date`, `template`, `accent`,
-`paper`, and `bib`. A flag passed on the command line overrides the matching front-matter key,
+`paper`, `margin`, `align`, `toc`, and `bib`. A flag passed on the command line overrides the matching front-matter key,
 which in turn overrides the auto-detected value.
 
 ---
@@ -370,6 +374,18 @@ That resolves to the place where `model.md` was merged in. Links to anything
 outside the build — a URL, a file that is not part of the manifest — are left
 exactly as they are.
 
+A link to a heading in the same file works the same way, using the anchor
+GitHub would give it:
+
+```markdown
+Back to [the overview](#overview).
+```
+
+A target that is plainly a web address but was written without a scheme, as in
+`[my site](example.com)`, is given `https://`. Markdown reads such a target as
+a relative path, which in a PDF means a file sitting beside it, and readers
+report that as an error rather than opening anything.
+
 
 ---
 
@@ -446,6 +462,9 @@ Every key it understands:
 | `branding` | `false` hides the `doc-engine` attribution |
 | `code_theme` | `github`, `solarized`, `monochrome`, or a path to a `.tmTheme` |
 | `pdf_standard` | `a-2b` or `a-3b` |
+| `margin` | `tight`, `normal`, `wide`, or a measurement such as `2cm` |
+| `align` | `justify`, `left`, `right`, or `center` |
+| `toc` | `false` leaves out the generated table of contents |
 | `tall_images` | `fit` or `split` |
 | `fetch_images` | `true` downloads images linked by URL |
 
@@ -457,7 +476,9 @@ document is built.
 ## Large Images
 
 A picture that does not fit the text block is scaled down until it does, so
-nothing is ever clipped. For a tall diagram — a top-down flowchart, a long
+nothing is ever clipped. It stops a little short of the full height of the
+page, which leaves room for the sentence that introduces it to stay on the same
+page rather than being stranded above a column of white space. For a tall diagram — a top-down flowchart, a long
 schema — scaling it onto one page can leave it unreadable, so it can be cut
 across pages at full size instead:
 
@@ -609,6 +630,7 @@ The converter module parses Markdown using [`mistune`](https://github.com/leptur
 | `text[^1]` | `#footnote[...]` |
 | `![alt](local.png)` | `#image("local.png")` |
 | `<img src="local.png" width="300">` | Embedded image, using the same path as Markdown images |
+| `<div align="center">` | `#align(center)[...]` around everything up to the closing tag |
 | `> blockquote` | `#block(...)` |
 | `---` | `#line(...)` |
 
@@ -747,6 +769,7 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/leonardosalasd/doc-engine-cli build
 - [x] Footnotes (`[^1]`)
 - [x] Local images, and remote ones with `--fetch-images`
 - [x] Raw HTML `<img>` tags (inline or block), sized by `width` and `height` in pixels
+- [x] `align` on a raw HTML block (`<div align="center">`, `<center>`)
 - [x] Math blocks (LaTeX `$…$` and `$$…$$`)
 - [x] Mermaid and SVG diagram blocks
 - [x] GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`)

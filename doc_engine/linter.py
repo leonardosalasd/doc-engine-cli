@@ -10,6 +10,18 @@ from dataclasses import dataclass
 
 _LINK = re.compile(r"(!?)\[(?P<text>[^\]]*)\]\((?P<url>[^)]*)\)")
 _FENCE = re.compile(r"^\s*(```|~~~)")
+_FOOTNOTE_DEF = re.compile(r"^ {0,3}\[\^(?P<label>[^\]]+)\]:")
+_FOOTNOTE_REF = re.compile(r"\[\^(?P<label>[^\]]+)\](?!:)")
+_CODESPAN = re.compile(r"`+[^`\n]*`+")
+
+
+def _without_code(line: str) -> str:
+    """The line with inline code blanked out, columns left where they were.
+
+    A file that documents Markdown writes `[^1]` to show the syntax, and that
+    is not a reference to anything.
+    """
+    return _CODESPAN.sub(lambda match: " " * len(match.group(0)), line)
 
 
 @dataclass(frozen=True)
@@ -31,6 +43,8 @@ def lint(markdown: str) -> list[Issue]:
     in_fence = False
     fence_marker = ""
     fence_opened_at = 0
+    defined: set[str] = set()
+    referenced: list[tuple[str, int, int]] = []
 
     for number, line in enumerate(lines, start=1):
         fence = _FENCE.match(line)
@@ -49,10 +63,25 @@ def lint(markdown: str) -> list[Issue]:
 
         issues.extend(_check_links(line, number))
 
+        definition = _FOOTNOTE_DEF.match(line)
+        if definition:
+            defined.add(definition.group("label"))
+            continue
+        for match in _FOOTNOTE_REF.finditer(_without_code(line)):
+            referenced.append((match.group("label"), number, match.start() + 1))
+
     if in_fence:
         issues.append(Issue(fence_opened_at, 1, "error", "unclosed fenced code block"))
 
-    return issues
+    # A reference with nothing to point at is not a compiler error: it reaches
+    # the page as the literal `[^1]` the author typed, which is easy to miss.
+    issues.extend(
+        Issue(line, column, "warning", f"footnote [^{label}] has no definition")
+        for label, line, column in referenced
+        if label not in defined
+    )
+
+    return sorted(issues, key=lambda issue: (issue.line, issue.column))
 
 
 def _check_links(line: str, number: int) -> list[Issue]:

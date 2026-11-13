@@ -109,6 +109,16 @@ class TestConvert:
         result = convert(md)
         assert "```python" in result
 
+    def test_code_block_holding_its_own_fence(self) -> None:
+        md = '````python\nif line.startswith("```"):\n    pass\n````'
+        result = convert(md)
+        assert result.startswith("\n````python\n")
+        assert result.endswith("````\n\n")
+
+    def test_fence_grows_past_the_longest_run(self) -> None:
+        md = "`````\na ```` b\n`````"
+        assert convert(md).startswith("\n`````\n")
+
     def test_link(self) -> None:
         result = convert("[click here](https://example.com)")
         assert '#link("https://example.com")' in result
@@ -133,6 +143,43 @@ class TestConvert:
 
     def test_empty_input(self) -> None:
         assert convert("") == ""
+
+
+class TestLinkTargets:
+    def test_bare_host_gets_a_scheme(self) -> None:
+        assert '#link("https://leonardosalas.dev")' in convert("[me](leonardosalas.dev)")
+        assert '#link("https://example.com/a/b")' in convert("[a](example.com/a/b)")
+
+    def test_files_and_paths_are_left_alone(self) -> None:
+        for target in ("README.md", "docs/guide.md", "./notes.txt", "/abs/path"):
+            assert f'#link("{target}")' in convert(f"[x]({target})")
+
+    def test_written_schemes_are_left_alone(self) -> None:
+        assert '#link("mailto:a@b.com")' in convert("[m](mailto:a@b.com)")
+        assert '#link("https://x.dev")' in convert("[s](https://x.dev)")
+
+    def test_a_local_file_is_not_mistaken_for_a_host(self, tmp_path) -> None:
+        (tmp_path / "data.sqlite").write_text("x")
+        result = convert("[db](data.sqlite)", base_dir=tmp_path)
+        assert '#link("data.sqlite")' in result
+
+    def test_headings_are_labelled_and_reachable(self) -> None:
+        result = convert("## Mi Sección\n\n[ir](#mi-sección)")
+        assert "== Mi Sección <h-mi-sección>" in result
+        assert "#link(<h-mi-sección>)[ir]" in result
+
+    def test_repeated_headings_get_their_own_anchors(self) -> None:
+        result = convert("## Setup\n\n## Setup\n\n[a](#setup)\n\n[b](#setup-1)")
+        assert "<h-setup>" in result
+        assert "<h-setup-1>" in result
+        assert "#link(<h-setup>)[a]" in result
+        assert "#link(<h-setup-1>)[b]" in result
+
+    def test_an_anchor_with_no_heading_warns_instead_of_linking(self) -> None:
+        result = convert_document("[nope](#missing)")
+        assert "#link" not in result.body
+        assert "nope" in result.body
+        assert result.warnings == ["no heading matches #missing"]
 
 
 class TestTaskLists:
@@ -253,6 +300,62 @@ class TestHtmlImages:
         assert convert("a<br>b") == "a\\\nb\n\n"
 
 
+class TestPageBreaks:
+    def test_text_sticks_to_the_picture_it_introduces(self, tmp_path) -> None:
+        (tmp_path / "shot.png").write_bytes(b"image")
+        result = convert("Then you take the photo\n\n![shot](shot.png)\n", base_dir=tmp_path)
+        assert "#block(sticky: true)[Then you take the photo]" in result
+
+    def test_a_lone_paragraph_is_left_alone(self) -> None:
+        assert "sticky" not in convert("Just a sentence.\n\nAnd another.\n")
+
+    def test_a_picture_does_not_stick_to_the_next_one(self, tmp_path) -> None:
+        (tmp_path / "a.png").write_bytes(b"image")
+        result = convert("![one](a.png)\n\n![two](a.png)\n", base_dir=tmp_path)
+        assert "sticky" not in result
+
+    def test_an_alert_keeps_its_label(self) -> None:
+        result = convert("> [!WARNING]\n> Mind the gap.\n")
+        assert "#block(sticky: true)[#text(weight: 700" in result
+
+
+class TestHtmlAlignment:
+    def test_a_centered_block_wraps_what_it_holds(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"image")
+        result = convert(
+            '<div align="center">\n\n![logo](logo.png)\n\nCaption.\n\n</div>',
+            base_dir=tmp_path,
+        )
+        assert result.strip().startswith("#align(center)[")
+        assert result.strip().endswith("]")
+        assert "Caption." in result
+
+    def test_a_self_contained_block_works_too(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"image")
+        result = convert('<div align="center"><img src="logo.png"></div>', base_dir=tmp_path)
+        assert result.strip().startswith("#align(center)[")
+        assert "#fit-image(" in result
+
+    def test_right_and_left_are_honored(self) -> None:
+        assert "#align(right)[" in convert('<div align="right">\n\nx\n\n</div>')
+        assert "#align(left)[" in convert('<div align="left">\n\nx\n\n</div>')
+
+    def test_the_legacy_center_tag_counts(self) -> None:
+        assert "#align(center)[" in convert("<center>\n\nx\n\n</center>")
+
+    def test_a_plain_div_changes_nothing(self, tmp_path) -> None:
+        (tmp_path / "logo.png").write_bytes(b"image")
+        result = convert("<div>\n\n![logo](logo.png)\n\n</div>", base_dir=tmp_path)
+        assert "#align" not in result
+
+    def test_an_unclosed_block_is_closed_anyway(self) -> None:
+        result = convert('<div align="center">\n\nNothing closes this.\n')
+        assert result.count("#align(center)[") == result.count("]")
+
+    def test_an_unknown_alignment_is_ignored(self) -> None:
+        assert "#align" not in convert('<div align="sideways">\n\nx\n\n</div>')
+
+
 class TestImages:
     def test_local_image_is_embedded(self, tmp_path) -> None:
         (tmp_path / "logo.png").write_bytes(b"\x89PNG\r\n")
@@ -343,7 +446,10 @@ class TestAlerts:
 class TestFormattedTitle:
     def test_title_uses_body_plugins_and_citations(self) -> None:
         for inline in ("~~struck~~ title", "The $x^2$ theorem", "Result [@smith2020]"):
-            assert extract_title_markup(f"# {inline}") == convert(f"# {inline}").strip()[2:]
+            # A body heading carries the anchor links reach it by; a title,
+            # which nothing links to, does not.
+            heading = convert(f"# {inline}").strip()[2:].rsplit(" <", 1)[0]
+            assert extract_title_markup(f"# {inline}") == heading
 
     def test_plugin_metadata_is_plain(self) -> None:
         assert extract_title("# ~~Old~~ $x^2$ result") == "Old x^2 result"

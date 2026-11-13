@@ -1,8 +1,10 @@
+import importlib
+import json
 from pathlib import Path
 
 from click.testing import CliRunner
 
-from doc_engine import __version__
+from doc_engine import __version__, settings
 from doc_engine.cli import _unique_path, cli
 from doc_engine.compiler import _build_main, available_templates
 
@@ -104,6 +106,120 @@ class TestDryRun:
         result = CliRunner().invoke(cli, ["build", str(good), "--dry-run"])
         assert result.exit_code == 0
         assert "No issues found" in result.output
+
+
+class TestDiscovery:
+    def _folder(self, tmp_path, *names: str) -> None:
+        for name in names:
+            (tmp_path / name).write_text(f"# {name}\n\nBody.\n")
+
+    def test_without_a_readme_the_first_file_wins(self, tmp_path, monkeypatch) -> None:
+        self._folder(tmp_path, "tarea.md", "informe.md", "zeta.md")
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["build", "--dry-run"])
+        assert result.exit_code == 0
+        assert "informe.md" in result.output
+
+    def test_a_readme_still_wins(self, tmp_path, monkeypatch) -> None:
+        self._folder(tmp_path, "aaa.md", "README.md")
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["build", "--dry-run"])
+        assert "README.md" in result.output
+
+    def test_an_empty_folder_still_explains_itself(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["build", "--dry-run"])
+        assert result.exit_code == 1
+        assert "Nothing to build" in " ".join(result.output.split())
+
+    def test_all_checks_every_file(self, tmp_path, monkeypatch) -> None:
+        self._folder(tmp_path, "one.md", "two.md")
+        (tmp_path / "three.md").write_text("# Three\n\nA [broken]() link.\n")
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["build", "--all", "--dry-run"])
+        assert result.exit_code == 1
+        assert "three.md" in result.output
+
+    def test_all_refuses_a_single_output_name(self, tmp_path, monkeypatch) -> None:
+        self._folder(tmp_path, "one.md")
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["build", "--all", "-o", "out.pdf"])
+        assert result.exit_code == 1
+        assert "--output" in result.output
+
+    def test_all_refuses_to_watch(self, tmp_path, monkeypatch) -> None:
+        self._folder(tmp_path, "one.md")
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(cli, ["build", "--all", "--watch"])
+        assert result.exit_code == 1
+        assert "--watch" in result.output
+
+
+class TestLayoutOptions:
+    def _doc(self, tmp_path):
+        doc = tmp_path / "doc.md"
+        doc.write_text("# T\n\n## Section\n\nBody text.\n")
+        return doc
+
+    def test_margin_word_becomes_a_length(self) -> None:
+        assert settings.margin_length("tight") == "0.6in"
+        assert settings.margin_length(" WIDE ") == "1.5in"
+
+    def test_margin_measurement_is_kept(self) -> None:
+        assert settings.margin_length("2cm") == "2cm"
+        assert settings.margin_length("1.5 in") == "1.5in"
+
+    def test_margin_nonsense_is_rejected(self) -> None:
+        for value in ("banana", "2", "2 parsecs", ""):
+            assert settings.margin_length(value) is None
+
+    def test_unknown_margin_stops_the_build(self, tmp_path) -> None:
+        result = CliRunner().invoke(cli, ["build", str(self._doc(tmp_path)), "--margin", "huge"])
+        assert result.exit_code == 1
+        assert "Unknown margin" in " ".join(result.output.split())
+
+    def test_unknown_alignment_is_refused(self, tmp_path) -> None:
+        result = CliRunner().invoke(cli, ["build", str(self._doc(tmp_path)), "--align", "sideways"])
+        assert result.exit_code != 0
+
+    def test_options_reach_the_compiler(self, tmp_path, monkeypatch) -> None:
+        module = importlib.import_module("doc_engine.cli")
+        captured = {}
+        monkeypatch.setattr(module, "compile_pdf", lambda **kwargs: captured.update(kwargs))
+        result = CliRunner().invoke(
+            cli,
+            ["build", str(self._doc(tmp_path)), "--no-toc", "--margin", "2cm", "--align", "left"],
+        )
+        assert result.exit_code == 0, result.output
+        assert captured["toc"] is False
+        assert captured["margin"] == "2cm"
+        assert captured["text_align"] == "left"
+
+    def test_defaults_leave_the_template_alone(self, tmp_path, monkeypatch) -> None:
+        module = importlib.import_module("doc_engine.cli")
+        captured = {}
+        monkeypatch.setattr(module, "compile_pdf", lambda **kwargs: captured.update(kwargs))
+        CliRunner().invoke(cli, ["build", str(self._doc(tmp_path))])
+        assert captured["toc"] is True
+        assert captured["margin"] is None
+        assert captured["text_align"] is None
+
+    def test_front_matter_can_set_them_too(self, tmp_path, monkeypatch) -> None:
+        module = importlib.import_module("doc_engine.cli")
+        captured = {}
+        monkeypatch.setattr(module, "compile_pdf", lambda **kwargs: captured.update(kwargs))
+        doc = tmp_path / "doc.md"
+        doc.write_text("---\ntoc: false\nmargin: wide\nalign: right\n---\n\n# T\n\nBody.\n")
+        result = CliRunner().invoke(cli, ["build", str(doc)])
+        assert result.exit_code == 0, result.output
+        assert captured["toc"] is False
+        assert captured["margin"] == "1.5in"
+        assert captured["text_align"] == "right"
+
+    def test_info_lists_them(self) -> None:
+        reported = json.loads(CliRunner().invoke(cli, ["info", "--json"]).output)
+        assert reported["margins"]["tight"] == "0.6in"
+        assert "justify" in reported["alignments"]
 
 
 class TestAccentValidation:
