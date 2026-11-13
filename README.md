@@ -63,7 +63,7 @@ That's it. Zero configuration required.
 | **Page Sizes** | A4 by default, plus A3–A6, ISO/JIS B5, and US letter, legal, and tabloid. |
 | **Project Config** | A `.doc-engine.toml` keeps a team's defaults out of every document. |
 | **Rich Markdown** | Embeds local images, renders GitHub task lists as real checkboxes, and turns `[^1]` footnotes into native Typst footnotes. |
-| **Error Checking** | Reports source problems with line and column before compiling. A `--dry-run` mode runs the check on its own. |
+| **Error Checking** | Reports source problems — empty links, unclosed fences, footnotes with no definition — with line and column before compiling. A `--dry-run` mode runs the check on its own. |
 | **Non-Destructive** | Never overwrites an existing PDF — writes `report (1).pdf`, `report (2).pdf`, … unless you pass `--force`. |
 | **Premium Typography** | Font stacks that end in a font Typst ships, so a document looks the same in a bare container as on a laptop. |
 | **Pure Python** | No external binaries required (no Pandoc, no LaTeX). Ships as a single `pip install`. |
@@ -374,6 +374,18 @@ That resolves to the place where `model.md` was merged in. Links to anything
 outside the build — a URL, a file that is not part of the manifest — are left
 exactly as they are.
 
+A link to a heading in the same file works the same way, using the anchor
+GitHub would give it:
+
+```markdown
+Back to [the overview](#overview).
+```
+
+A target that is plainly a web address but was written without a scheme, as in
+`[my site](example.com)`, is given `https://`. Markdown reads such a target as
+a relative path, which in a PDF means a file sitting beside it, and readers
+report that as an error rather than opening anything.
+
 
 ---
 
@@ -464,7 +476,9 @@ document is built.
 ## Large Images
 
 A picture that does not fit the text block is scaled down until it does, so
-nothing is ever clipped. For a tall diagram — a top-down flowchart, a long
+nothing is ever clipped. It stops a little short of the full height of the
+page, which leaves room for the sentence that introduces it to stay on the same
+page rather than being stranded above a column of white space. For a tall diagram — a top-down flowchart, a long
 schema — scaling it onto one page can leave it unreadable, so it can be cut
 across pages at full size instead:
 
